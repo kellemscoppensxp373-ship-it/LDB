@@ -176,12 +176,22 @@ On a headless box the GUI tests use Qt's `offscreen` platform automatically
 (`tests/conftest.py` sets `QT_QPA_PLATFORM=offscreen`).
 
 ### Windows build: `check_hostname requires server_hostname`
-If your machine is behind an `https://` proxy and ships an old pip (<22), every
-`pip` call dies with `ValueError: check_hostname requires server_hostname`.
-`build_windows.bat` already works around it: it rewrites the proxy scheme to
-`http://` (the CONNECT tunnel is unchanged, TLS still end-to-end) and upgrades
-pip via `python -m pip` (module form, since `pip.exe` cannot replace itself on
-Windows). If you run pip by hand instead, do the same:
+Old pip (<22) dies with `ValueError: check_hostname requires server_hostname`
+whenever the **proxy URL** carries an `https://` scheme. On Windows the proxy
+reaches pip through two doors, and `build_windows.bat` handles both:
+
+* **Environment variables** — the script rewrites `https://` → `http://` in
+  `HTTP(S)_PROXY` / `ALL_PROXY` (the CONNECT tunnel is unchanged, TLS to PyPI
+  stays end-to-end).
+* **The Windows registry (Internet Options)** — even with no env vars set,
+  CPython's `urllib.request.getproxies_registry()` maps a plain `host:port`
+  system proxy to `https://host:port` for HTTPS traffic. Step 2 runs
+  `tools/fix_proxy.py`, which reads the proxy exactly the way pip will and
+  prints `set "HTTPS_PROXY=http://…"` overrides that the batch `call`s.
+
+pip is also upgraded via `python -m pip` (module form, since `pip.exe` cannot
+replace itself on Windows), and an upgrade failure no longer aborts the build.
+If you run pip by hand instead, do the same:
 
 ```bat
 set HTTPS_PROXY=!HTTPS_PROXY:https://=http://!

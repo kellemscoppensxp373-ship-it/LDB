@@ -53,7 +53,11 @@ if errorlevel 1 (
 rem --------------------------------------------------------------- 2. прокси
 rem  Старый pip (до 22.x) падает на https://-прокси с ошибкой
 rem      ValueError: check_hostname requires server_hostname
-rem  Туннель CONNECT при этом остаётся тем же самым - меняется только схема.
+rem  Прокси может прийти ДВУМЯ путями:
+rem    1) переменные окружения HTTP(S)_PROXY;
+rem    2) реестр Windows (Интернет-параметры): Python для голого host:port
+rem       сам подставляет схему https:// для HTTPS-трафика.
+rem  В обоих случаях меняем схему на http:// - туннель CONNECT тот же,
 rem  TLS до PyPI по-прежнему шифруется от конца до конца.
 echo [2/7] Проверка прокси
 set "PROXY_SEEN=0"
@@ -63,22 +67,27 @@ if defined HTTPS_PROXY set "PROXY_SEEN=1"
 if defined https_proxy set "PROXY_SEEN=1"
 if defined ALL_PROXY   set "PROXY_SEEN=1"
 if defined all_proxy   set "PROXY_SEEN=1"
-if "%PROXY_SEEN%"=="0" (
-    echo        прокси в окружении не задан - работаем напрямую
+if defined HTTPS_PROXY set "HTTPS_PROXY=!HTTPS_PROXY:https://=http://!"
+if defined https_proxy set "https_proxy=!https_proxy:https://=http://!"
+if defined HTTP_PROXY  set "HTTP_PROXY=!HTTP_PROXY:https://=http://!"
+if defined http_proxy  set "http_proxy=!http_proxy:https://=http://!"
+if defined ALL_PROXY   set "ALL_PROXY=!ALL_PROXY:https://=http://!"
+if defined all_proxy   set "all_proxy=!all_proxy:https://=http://!"
+if "%PROXY_SEEN%"=="1" (
+    echo        прокси из переменных окружения: схема https:// заменена на http://
 ) else (
-    if defined HTTPS_PROXY set "HTTPS_PROXY=!HTTPS_PROXY:https://=http://!"
-    if defined https_proxy set "https_proxy=!https_proxy:https://=http://!"
-    if defined HTTP_PROXY  set "HTTP_PROXY=!HTTP_PROXY:https://=http://!"
-    if defined http_proxy  set "http_proxy=!http_proxy:https://=http://!"
-    if defined ALL_PROXY   set "ALL_PROXY=!ALL_PROXY:https://=http://!"
-    if defined all_proxy   set "all_proxy=!all_proxy:https://=http://!"
-    echo        прокси найден, схема https:// заменена на http:// ^(иначе pip падает^)
-    if defined HTTP_PROXY  echo          HTTP_PROXY  = !HTTP_PROXY!
-    if defined http_proxy  echo          http_proxy  = !http_proxy!
-    if defined HTTPS_PROXY echo          HTTPS_PROXY = !HTTPS_PROXY!
-    if defined https_proxy echo          https_proxy = !https_proxy!
-    if defined ALL_PROXY   echo          ALL_PROXY   = !ALL_PROXY!
-    if defined all_proxy   echo          all_proxy   = !all_proxy!
+    echo        переменные прокси не заданы - проверяю системный прокси ^(реестр^)
+)
+rem  Системный прокси читает сам Python (urllib.request.getproxies) - ровно так
+rem  же, как это сделает pip.  Скрипт печатает готовые set-команды.
+set "LB_PROXY_TMP=%TEMP%\lifeboard_proxy.cmd"
+%PY% tools\fix_proxy.py > "!LB_PROXY_TMP!" 2>nul
+for %%I in ("!LB_PROXY_TMP!") do if %%~zI GTR 0 (
+    echo        найден системный прокси - включаю схему http:// для pip:
+    type "!LB_PROXY_TMP!"
+    call "!LB_PROXY_TMP!"
+) else (
+    if "%PROXY_SEEN%"=="0" echo        прокси не найден - работаем напрямую
 )
 
 rem ---------------------------------------------------------------- 3. venv
@@ -108,13 +117,12 @@ if errorlevel 1 (
     %PIPCMD% install --upgrade --no-cache-dir pip setuptools wheel
 )
 if errorlevel 1 (
-    echo [ОШИБКА] pip не может выйти в сеть.
-    echo          Проверьте прокси ^(шаг 2^) и выполните: "%VPY%" tools\diagnose.py
-    echo          Если прокси не нужен, очистите переменные HTTP_PROXY/HTTPS_PROXY
-    echo          и запустите скрипт заново.
-    goto :fail
+    echo [ВНИМ] pip не обновился - продолжу со старым pip.
+    echo        Если установка ниже упадёт, смотрите шаг 2 ^(прокси^) и
+    echo        выполните "%VPY%" tools\diagnose.py
+) else (
+    %PIPCMD% --version
 )
-%PIPCMD% --version
 
 rem --------------------------------------------------------- 5. зависимости
 echo [5/7] ставлю зависимости (это может занять несколько минут)
@@ -128,7 +136,11 @@ if errorlevel 1 (
     echo        [ВНИМ] Полные зависимости не установились. Откат к версии только с GUI.
     echo        [ВНИМ] Программа запустится, но советник останется в режиме эвристики.
     %PIPCMD% install PySide6 pyinstaller
-    if errorlevel 1 goto :fail
+    if errorlevel 1 (
+        echo [ОШИБКА] pip не может установить пакеты.
+        echo          Проверьте прокси ^(шаг 2^) и выполните: "%VPY%" tools\diagnose.py
+        goto :fail
+    )
 )
 
 rem -------------------------------------------------------------- 6. CUDA

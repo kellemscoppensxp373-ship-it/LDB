@@ -194,3 +194,50 @@ def test_human_size_rendering():
     assert paths.human_size(512) == "512 B"
     assert paths.human_size(2048) == "2.0 KB"
     assert paths.human_size(5_000_000_000) == "4.7 GB"
+
+
+# --------------------------------------------------------------------------- #
+# Windows build scripts
+# --------------------------------------------------------------------------- #
+def _load_fix_proxy():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "fix_proxy", ROOT / "tools" / "fix_proxy.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_fix_proxy_emits_http_scheme_overrides(monkeypatch, capsys):
+    """An https:// proxy (env *or* Windows registry) must become http://."""
+    mod = _load_fix_proxy()
+    monkeypatch.setattr(
+        mod.urllib.request, "getproxies",
+        lambda: {"https": "https://corp.example:8080",
+                 "http": "http://corp.example:8080"})
+    assert mod.main() == 0
+    out = capsys.readouterr().out
+    assert 'set "HTTPS_PROXY=http://corp.example:8080"' in out
+    # the http entry already used a plain scheme: leave it untouched
+    assert 'set "HTTP_PROXY=' not in out
+
+
+def test_fix_proxy_silent_when_no_proxy(monkeypatch, capsys):
+    mod = _load_fix_proxy()
+    monkeypatch.setattr(mod.urllib.request, "getproxies", lambda: {})
+    assert mod.main() == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_build_script_normalises_proxy_and_uses_module_pip():
+    text = (ROOT / "build_windows.bat").read_text(encoding="utf-8")
+    # env-var scheme rewrite
+    assert 'set "HTTPS_PROXY=!HTTPS_PROXY:https://=http://!"' in text
+    # registry/system proxy path via the helper
+    assert "tools" + chr(92) + "fix_proxy.py" in text
+    # pip is always invoked as a module, never as pip.exe
+    assert "-m pip" in text
+    assert "pip.exe install" not in text
+    # CRLF line endings for cmd.exe
+    assert b"\r\n" in (ROOT / "build_windows.bat").read_bytes()
