@@ -14,6 +14,7 @@ import re
 from datetime import date, timedelta
 from typing import Any, Iterable
 
+from ..i18n import fmt_num, tr
 from ..storage.metrics import (
     day_metrics,
     heatmap_series,
@@ -36,9 +37,13 @@ WORD_RE = re.compile(r"[a-z0-9']+")
 
 
 def _num(value: float, decimals: int = 0) -> str:
-    if decimals:
-        return f"{value:,.{decimals}f}"
-    return f"{value:,.0f}"
+    """Locale-aware integer/thousands formatting for the context block."""
+    return fmt_num(value, decimals)
+
+
+def _signed(value: float) -> str:
+    """``+1,234`` / ``-1,234`` with locale-aware separators."""
+    return ("+" if value >= 0 else "-") + fmt_num(abs(value))
 
 
 def _ratio(done: float, goal: float) -> str:
@@ -71,44 +76,60 @@ def serialize_day(state: dict[str, Any], day: str | None = None, *,
     metrics = day_metrics(state, day)
     goals = state.get("settings", {}).get("goals", {})
     macros = metrics["macros"]
-    lines = [f"DATE {day} — score {metrics['score']:.0f}/100"]
+    lines = [tr(f"DATE {day} — score {metrics['score']:.0f}/100",
+                f"ДАТА {day} — счёт {metrics['score']:.0f}/100")]
 
     done, missing = habit_lines(state, day)
     total = metrics["habits_total"]
-    habit_line = f"  habits: {metrics['habits_done']}/{total} done"
+    habit_line = tr(f"  habits: {metrics['habits_done']}/{total} done",
+                    f"  обряды: {metrics['habits_done']}/{total} закрыто")
     if done:
-        habit_line += f" (done: {', '.join(done)})"
+        habit_line += tr(f" (done: {', '.join(done)})",
+                         f" (закрыто: {', '.join(done)})")
     if missing:
         shown = ", ".join(missing[:4])
         if len(missing) > 4:
-            shown += f", +{len(missing) - 4} more"
-        habit_line += f" (missing: {shown})"
+            shown += tr(f", +{len(missing) - 4} more", f", ещё {len(missing) - 4}")
+        habit_line += tr(f" (missing: {shown})", f" (пропущено: {shown})")
     lines.append(habit_line)
 
-    lines.append(
+    lines.append(tr(
         f"  diet: {_num(macros['kcal'])} kcal (goal {_num(goals.get('kcal', 0))}, "
         f"{_ratio(macros['kcal'], goals.get('kcal', 0))}) | "
         f"P {_num(macros['protein'])}/{_num(goals.get('protein', 0))} "
         f"C {_num(macros['carbs'])}/{_num(goals.get('carbs', 0))} "
         f"F {_num(macros['fat'])}/{_num(goals.get('fat', 0))} | "
-        f"{metrics['meals']} meals logged"
-    )
+        f"{metrics['meals']} meals logged",
+        f"  питание: {_num(macros['kcal'])} ккал "
+        f"(цель {_num(goals.get('kcal', 0))}, "
+        f"{_ratio(macros['kcal'], goals.get('kcal', 0))}) | "
+        f"Б {_num(macros['protein'])}/{_num(goals.get('protein', 0))} "
+        f"У {_num(macros['carbs'])}/{_num(goals.get('carbs', 0))} "
+        f"Ж {_num(macros['fat'])}/{_num(goals.get('fat', 0))} | "
+        f"записано приёмов пищи: {metrics['meals']}"))
 
     if metrics["sets"] > 0:
-        session = metrics["session_name"] or "unnamed session"
-        lines.append(
+        session = metrics["session_name"] or tr("unnamed session",
+                                                "тренировка без названия")
+        lines.append(tr(
             f"  training: {session} — tonnage {_num(metrics['tonnage'])} kg "
             f"(goal {_num(goals.get('tonnage', 0))}, "
             f"{_ratio(metrics['tonnage'], goals.get('tonnage', 0))}), "
             f"{metrics['sets']} sets, {metrics['reps']} reps, "
-            f"{metrics['exercises']} exercises"
-        )
+            f"{metrics['exercises']} exercises",
+            f"  тренинг: {session} — тоннаж {_num(metrics['tonnage'])} кг "
+            f"(цель {_num(goals.get('tonnage', 0))}, "
+            f"{_ratio(metrics['tonnage'], goals.get('tonnage', 0))}), "
+            f"сетов {metrics['sets']}, повторов {metrics['reps']}, "
+            f"упражнений {metrics['exercises']}"))
         top = sorted(metrics["per_exercise"].items(), key=lambda kv: -kv[1])[:4]
         if top:
-            lines.append("    top lifts: " + ", ".join(
-                f"{name} {_num(volume)} kg" for name, volume in top))
+            lines.append(tr("    top lifts: ", "    лучшие подъёмы: ") + ", ".join(
+                tr(f"{name} {_num(volume)} kg", f"{name} {_num(volume)} кг")
+                for name, volume in top))
     else:
-        lines.append("  training: rest day (nothing logged)")
+        lines.append(tr("  training: rest day (nothing logged)",
+                        "  тренинг: день отдыха (ничего не записано)"))
 
     if include_diary:
         diary = state.get("diary", {}).get(day, {})
@@ -117,7 +138,8 @@ def serialize_day(state: dict[str, Any], day: str | None = None, *,
             clipped = text[:diary_chars].replace("\n", " ")
             if len(text) > diary_chars:
                 clipped += " […]"
-            lines.append(f"  diary ({metrics['diary_words']} words): {clipped}")
+            lines.append(tr(f"  diary ({metrics['diary_words']} words): {clipped}",
+                            f"  дневник ({metrics['diary_words']} слов): {clipped}"))
     return "\n".join(lines)
 
 
@@ -138,14 +160,22 @@ def serialize_recent(state: dict[str, Any], *, end: date | None = None,
     block = summary_block(state, end=end)
     goals = state.get("settings", {}).get("goals", {})
     return "\n".join([
-        f"LAST {days} DAYS (rolling window ending {end.isoformat()})",
-        f"  avg score {avg_score:.1f}/100 (today {block['today']['score']:.0f})",
-        f"  avg intake {avg_kcal:,.0f} kcal/day "
-        f"(goal {goals.get('kcal', 0):,})",
-        f"  training days {training_days}/{days}, tonnage in window "
-        f"{total_tonnage:,.0f} kg",
-        f"  streak {block['streak']} day(s) above 40 score, "
-        f"{block['logged_streak']} day(s) with any log",
+        tr(f"LAST {days} DAYS (rolling window ending {end.isoformat()})",
+           f"ПОСЛЕДНИЕ {days} ДНЕЙ (скользящее окно до {end.isoformat()})"),
+        tr(f"  avg score {avg_score:.1f}/100 (today {block['today']['score']:.0f})",
+           f"  средний счёт {avg_score:.1f}/100 (сегодня {block['today']['score']:.0f})"),
+        tr(f"  avg intake {avg_kcal:,.0f} kcal/day "
+           f"(goal {goals.get('kcal', 0):,})",
+           f"  средний приём {fmt_num(avg_kcal)} ккал/день "
+           f"(цель {fmt_num(goals.get('kcal', 0))})"),
+        tr(f"  training days {training_days}/{days}, tonnage in window "
+           f"{total_tonnage:,.0f} kg",
+           f"  тренировочных дней {training_days}/{days}, тоннаж за окно "
+           f"{fmt_num(total_tonnage)} кг"),
+        tr(f"  streak {block['streak']} day(s) above 40 score, "
+           f"{block['logged_streak']} day(s) with any log",
+           f"  серия {block['streak']} дн. со счётом выше 40, "
+           f"{block['logged_streak']} дн. с записями"),
     ])
 
 
@@ -166,43 +196,68 @@ def serialize_deltas(state: dict[str, Any], *, end: date | None = None) -> str:
     def delta_line(label: str, previous: float, current: float, unit: str) -> str:
         change = percent_change(previous, current)
         if change is None:
-            return f"    {label} {current:,.0f} {unit} (no previous day to compare)"
-        return (f"    {label} {current:,.0f} {unit} "
-                f"({change:+.1f}% from {previous:,.0f})")
+            return tr(
+                f"    {label} {current:,.0f} {unit} (no previous day to compare)",
+                f"    {label} {fmt_num(current)} {unit} (нет предыдущего дня для сравнения)")
+        return tr(
+            f"    {label} {current:,.0f} {unit} "
+            f"({change:+.1f}% from {previous:,.0f})",
+            f"    {label} {fmt_num(current)} {unit} "
+            f"({change:+.1f}% от {fmt_num(previous)})")
 
+    kg = tr("kg", "кг")
+    kcal = tr("kcal", "ккал")
+    gram = tr("g", "г")
     lines = [
-        "DELTAS",
-        f"  yesterday ({yest['date']}) vs previous day",
-        delta_line("tonnage", before["tonnage"], yest["tonnage"], "kg"),
-        delta_line("intake", before["macros"]["kcal"], yest["macros"]["kcal"], "kcal"),
-        delta_line("protein", before["macros"]["protein"],
-                   yest["macros"]["protein"], "g"),
-        f"    habits {yest['habits_done']}/{yest['habits_total']} "
-        f"({yest['habits_done'] - before['habits_done']:+d})",
-        f"  today so far ({today['date']}, partial — the day is not over)",
+        tr("DELTAS", "ИЗМЕНЕНИЯ"),
+        tr(f"  yesterday ({yest['date']}) vs previous day",
+           f"  вчера ({yest['date']}) против предыдущего дня"),
+        delta_line(tr("tonnage", "тоннаж"), before["tonnage"], yest["tonnage"], kg),
+        delta_line(tr("intake", "приём"), before["macros"]["kcal"],
+                   yest["macros"]["kcal"], kcal),
+        delta_line(tr("protein", "белок"), before["macros"]["protein"],
+                   yest["macros"]["protein"], gram),
+        tr(f"    habits {yest['habits_done']}/{yest['habits_total']} "
+           f"({yest['habits_done'] - before['habits_done']:+d})",
+           f"    обряды {yest['habits_done']}/{yest['habits_total']} "
+           f"({yest['habits_done'] - before['habits_done']:+d})"),
+        tr(f"  today so far ({today['date']}, partial — the day is not over)",
+           f"  сегодня пока ({today['date']}, неполный день — день не закончен)"),
     ]
     kcal_goal = float(goals.get("kcal") or 0)
-    headroom = (f", headroom {kcal_goal - today['macros']['kcal']:+,.0f} kcal"
+    headroom = (tr(f", headroom {kcal_goal - today['macros']['kcal']:+,.0f} kcal",
+                   f", запас {_signed(kcal_goal - today['macros']['kcal'])} ккал")
                 if kcal_goal else "")
-    lines.append(f"    intake {today['macros']['kcal']:,.0f} kcal of "
-                 f"{kcal_goal:,.0f} goal{headroom}")
-    lines.append(f"    protein {today['macros']['protein']:,.0f} g, "
-                 f"carbs {today['macros']['carbs']:,.0f} g, "
-                 f"fat {today['macros']['fat']:,.0f} g")
-    lines.append(f"    training {today['sets']} sets, {today['tonnage']:,.0f} kg")
-    lines.append(f"    habits {today['habits_done']}/{today['habits_total']}")
+    lines.append(tr(f"    intake {today['macros']['kcal']:,.0f} kcal of "
+                    f"{kcal_goal:,.0f} goal{headroom}",
+                    f"    приём {fmt_num(today['macros']['kcal'])} ккал из цели "
+                    f"{fmt_num(kcal_goal)}{headroom}"))
+    lines.append(tr(f"    protein {today['macros']['protein']:,.0f} g, "
+                    f"carbs {today['macros']['carbs']:,.0f} g, "
+                    f"fat {today['macros']['fat']:,.0f} g",
+                    f"    белок {fmt_num(today['macros']['protein'])} г, "
+                    f"углеводы {fmt_num(today['macros']['carbs'])} г, "
+                    f"жиры {fmt_num(today['macros']['fat'])} г"))
+    lines.append(tr(f"    training {today['sets']} sets, {today['tonnage']:,.0f} kg",
+                    f"    тренинг {today['sets']} сет, {fmt_num(today['tonnage'])} кг"))
+    lines.append(tr(f"    habits {today['habits_done']}/{today['habits_total']}",
+                    f"    обряды {today['habits_done']}/{today['habits_total']}"))
     return "\n".join(lines)
 
 
 def serialize_goals(state: dict[str, Any]) -> str:
     goals = state.get("settings", {}).get("goals", {})
-    return (
+    return tr(
         "GOALS\n"
         f"  kcal {goals.get('kcal', 0):,} | protein {goals.get('protein', 0)} g | "
         f"carbs {goals.get('carbs', 0)} g | fat {goals.get('fat', 0)} g | "
         f"session tonnage {goals.get('tonnage', 0):,.0f} kg | "
-        f"habits/day {goals.get('habits', 0)}"
-    )
+        f"habits/day {goals.get('habits', 0)}",
+        "ЦЕЛИ\n"
+        f"  ккал {fmt_num(goals.get('kcal', 0))} | белок {fmt_num(goals.get('protein', 0))} г | "
+        f"углеводы {fmt_num(goals.get('carbs', 0))} г | жиры {fmt_num(goals.get('fat', 0))} г | "
+        f"тоннаж тренировки {fmt_num(goals.get('tonnage', 0))} кг | "
+        f"обрядов в день {fmt_num(goals.get('habits', 0))}")
 
 
 def serialize_library(state: dict[str, Any], limit: int = 6) -> str:
@@ -210,13 +265,17 @@ def serialize_library(state: dict[str, Any], limit: int = 6) -> str:
             state.get("library", [])
     if not books:
         return ""
-    lines = ["LIBRARY"]
+    lines = [tr("LIBRARY", "БИБЛИОТЕКА")]
+    status_ru = {"queued": "в очереди", "reading": "читаю",
+                 "finished": "прочитано", "abandoned": "брошено"}
     for book in books[:limit]:
         total = book.get("pages_total") or 0
         read = book.get("pages_read") or 0
-        progress = f" {read}/{total}p ({_ratio(read, total)})" if total else ""
+        progress = tr(f" {read}/{total}p ({_ratio(read, total)})",
+                      f" {read}/{total} стр. ({_ratio(read, total)})") if total else ""
+        status = str(book.get("status", "?"))
         lines.append(f"  {book.get('title', '?')} — {book.get('author', '?')} "
-                     f"[{book.get('status', '?')}]{progress}")
+                     f"[{tr(status, status_ru.get(status, status))}]{progress}")
     return "\n".join(lines)
 
 
@@ -323,15 +382,21 @@ def build_context(state: dict[str, Any], *, day: str | None = None,
 
     passages = retrieve_passages(state, query or "", end=end or date.fromisoformat(day))
     if passages:
-        retrieved = ["RETRIEVED FROM THE JOURNAL (most relevant to the question)"]
+        retrieved = [tr(
+            "RETRIEVED FROM THE JOURNAL (most relevant to the question)",
+            "НАЙДЕНО В ЖУРНАЛЕ (наиболее релевантно вопросу)")]
+        kind_ru = {"diary": "дневник", "book": "книга"}
         for passage in passages:
             label = f"{passage['date']} {passage['title']}".strip()
-            retrieved.append(f"  [{passage['kind']} {label}] {passage['snippet']}")
+            kind = str(passage["kind"])
+            retrieved.append(
+                f"  [{tr(kind, kind_ru.get(kind, kind))} {label}] {passage['snippet']}")
         sections.append("\n".join(retrieved))
 
     context = "\n\n".join(s for s in sections if s)
     if len(context) > max_chars:
-        context = context[:max_chars].rstrip() + "\n[context truncated]"
+        context = context[:max_chars].rstrip() + "\n" + tr(
+            "[context truncated]", "[контекст обрезан]")
     return context
 
 

@@ -1,51 +1,63 @@
 @echo off
+chcp 65001 >nul
 rem ============================================================================
-rem  LifeBoard AI - diagnostic run from source
+rem  LifeBoard AI - диагностический запуск из исходников
 rem  --------------------------------------------------------------------------
-rem  Runs the raw Python entry point WITH a console attached, so tracebacks,
-rem  Qt warnings and llama.cpp logs are visible.  Use this whenever the packaged
-rem  .exe misbehaves: it tells you immediately whether the problem is the code
-rem  or the packaging.
+rem  Запускает "сырую" точку входа Python С подключённой консолью, чтобы были
+rem  видны traceback'и, предупреждения Qt и логи llama.cpp. Пользуйтесь этим
+rem  скриптом, когда собранный .exe ведёт себя странно: он сразу показывает,
+rem  проблема в коде или в упаковке.
 rem
-rem  Usage:
-rem      run_dev.bat                 diagnose the environment, then start the app
-rem      run_dev.bat --no-diagnose   skip the environment report
-rem      run_dev.bat --tests         run the pytest suite instead of the app
+rem  Запуск:
+rem      run_dev.bat                 диагностика окружения, затем запуск программы
+rem      run_dev.bat --no-diagnose   пропустить отчёт об окружении
+rem      run_dev.bat --tests         вместо программы запустить тесты pytest
+rem      run_dev.bat --demo          заполнить журнал демонстрационными данными
 rem ============================================================================
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
-title LifeBoard AI - diagnostic console
+title LifeBoard AI - диагностическая консоль
 
 set "DIAGNOSE=1"
 set "RUN_TESTS=0"
+set "DEMO=0"
 :parse_args
 if "%~1"=="" goto :args_done
 if /I "%~1"=="--no-diagnose" set "DIAGNOSE=0"
 if /I "%~1"=="--tests" set "RUN_TESTS=1"
+if /I "%~1"=="--demo" set "DEMO=1"
 shift
 goto :parse_args
 :args_done
 
-rem ---- pick the interpreter: prefer the project venv ------------------------
+rem ---- выбор интерпретатора: сначала виртуальное окружение проекта ----------
 if exist ".venv\Scripts\python.exe" (
     set "PY=.venv\Scripts\python.exe"
 ) else (
     set "PY="
     py -3.13 -V >nul 2>&1 && set "PY=py -3.13"
     if not defined PY py -3.12 -V >nul 2>&1 && set "PY=py -3.12"
+    if not defined PY py -3.11 -V >nul 2>&1 && set "PY=py -3.11"
+    if not defined PY py -3.10 -V >nul 2>&1 && set "PY=py -3.10"
     if not defined PY set "PY=python"
 )
 if not defined PY (
-    echo [ERROR] no Python interpreter found. Install Python 3.12+ first.
+    echo [ОШИБКА] интерпретатор Python не найден. Сначала установите Python 3.10+.
     goto :end
 )
 
 echo.
 echo  ================================================================
-echo   LifeBoard AI - source run with console output
+echo   LifeBoard AI - запуск из исходников с выводом в консоль
 echo  ================================================================
-echo   interpreter : %PY%
+echo   интерпретатор : %PY%
 echo.
+
+if "%DEMO%"=="1" (
+    echo --- создаю демонстрационные данные ---
+    "%PY%" tools\seed_demo.py
+    echo.
+)
 
 if "%DIAGNOSE%"=="1" (
     "%PY%" tools\diagnose.py
@@ -53,16 +65,17 @@ if "%DIAGNOSE%"=="1" (
 )
 
 if "%RUN_TESTS%"=="1" (
-    echo --- running the test suite ---
+    echo --- запускаю набор тестов ---
     "%PY%" -m pytest tests -q
     goto :end
 )
 
-echo --- starting the application (close the window to stop) ---
-echo     Qt logs and Python tracebacks appear below.
+echo --- запускаю приложение (закройте окно, чтобы остановить) ---
+echo     логи Qt и traceback'и Python появятся ниже.
 echo.
 
-rem Make Qt shout about plugin and shader problems instead of failing quietly.
+rem Пусть Qt громко сообщает о проблемах с плагинами и шейдерами,
+rem а не падает молча.
 set "QT_LOGGING_RULES=qt.qpa.*=true"
 set "PYTHONFAULTHANDLER=1"
 set "PYTHONUNBUFFERED=1"
@@ -72,10 +85,10 @@ set "RC=%ERRORLEVEL%"
 
 echo.
 echo  ================================================================
-echo   application exited with code %RC%
+echo   приложение завершилось с кодом %RC%
 if exist "crash.log" (
     echo.
-    echo   --- last 40 lines of crash.log -----------------------------
+    echo   --- последние 40 строк crash.log -----------------------------
     powershell -NoProfile -Command "Get-Content -Tail 40 'crash.log'" 2>nul
 )
 echo  ================================================================

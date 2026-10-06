@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..i18n import tr
 from .common import GlyphButton, InlineBar, kind, role
 
 
@@ -57,7 +58,8 @@ class HabitRow(QWidget):
         self.toggle.setFixedSize(28, 26)
         self.toggle.setProperty("checkable", "true")
         self.toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.toggle.setToolTip(f"Toggle “{habit.get('name', '')}”")
+        self.toggle.setToolTip(tr(f"Toggle “{habit.get('name', '')}”",
+                              f"Переключить «{habit.get('name', '')}»"))
         self.toggle.toggled.connect(self._on_toggle)
         layout.addWidget(self.toggle)
 
@@ -65,9 +67,10 @@ class HabitRow(QWidget):
         self.name.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(self.name, 1)
 
-        self.streak_label = QLabel(f"☾ {streak}d", self)
+        self.streak_label = QLabel(tr(f"☾ {streak}d", f"☾ {streak} дн."), self)
         role(self.streak_label, "muted")
-        self.streak_label.setToolTip("Current streak for this habit")
+        self.streak_label.setToolTip(tr("Current streak for this habit",
+                                        "Текущая серия этого обряда"))
         layout.addWidget(self.streak_label)
 
         self.bar = InlineBar(self, height=10)
@@ -75,7 +78,7 @@ class HabitRow(QWidget):
         self.bar.set_ratio(1.0 if done else 0.0, caption="✓" if done else "")
         layout.addWidget(self.bar)
 
-        self.remove = GlyphButton("✕", "Delete habit", self)
+        self.remove = GlyphButton("✕", tr("Delete habit", "Удалить обряд"), self)
         self.remove.clicked.connect(lambda: self.removeRequested.emit(self.habit_id))
         layout.addWidget(self.remove)
 
@@ -90,7 +93,7 @@ class HabitRow(QWidget):
         self.bar.set_ratio(1.0 if done else 0.0, caption="✓" if done else "")
 
     def set_streak(self, streak: int) -> None:
-        self.streak_label.setText(f"☾ {streak}d")
+        self.streak_label.setText(tr(f"☾ {streak}d", f"☾ {streak} дн."))
 
     def set_accent(self, accent: str, accent_dark: str, bg: str, text: str) -> None:
         self.bar.set_colors(track=bg, start=accent_dark, end=accent, text=text)
@@ -113,19 +116,23 @@ class MealRow(QWidget):
         time_label.setFixedWidth(44)
         layout.addWidget(time_label)
 
-        name = QLabel(str(meal.get("name", "Meal")), self)
+        name = QLabel(str(meal.get("name") or tr("Meal", "Приём пищи")), self)
         name.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(name, 1)
 
-        macros = QLabel(
+        macros = QLabel(tr(
             f"{float(meal.get('kcal', 0)):.0f} kcal · "
             f"P {float(meal.get('protein', 0)):.0f} "
             f"C {float(meal.get('carbs', 0)):.0f} "
-            f"F {float(meal.get('fat', 0)):.0f}", self)
+            f"F {float(meal.get('fat', 0)):.0f}",
+            f"{float(meal.get('kcal', 0)):.0f} ккал · "
+            f"Б {float(meal.get('protein', 0)):.0f} "
+            f"У {float(meal.get('carbs', 0)):.0f} "
+            f"Ж {float(meal.get('fat', 0)):.0f}"), self)
         role(macros, "accent")
         layout.addWidget(macros)
 
-        remove = GlyphButton("✕", "Remove meal", self)
+        remove = GlyphButton("✕", tr("Remove meal", "Удалить приём пищи"), self)
         remove.clicked.connect(lambda: self.removeRequested.emit(self.meal_id))
         layout.addWidget(remove)
 
@@ -148,27 +155,28 @@ class MealForm(QWidget):
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.name = QLineEdit(self)
-        self.name.setPlaceholderText("Meal name (e.g. Post-workout rice)")
-        form.addRow("name", self.name)
+        self.name.setPlaceholderText(tr("Meal name (e.g. Post-workout rice)",
+                                    "Название (напр. рис после тренировки)"))
+        form.addRow(tr("name", "название"), self.name)
 
         self.time = QTimeEdit(self)
         self.time.setDisplayFormat("HH:mm")
-        form.addRow("time", self.time)
+        form.addRow(tr("time", "время"), self.time)
 
         spin_row = QHBoxLayout()
         spin_row.setSpacing(6)
-        self.kcal = self._spin(0, 5000, 0, "kcal")
-        self.protein = self._spin(0, 500, 0, "P g")
-        self.carbs = self._spin(0, 900, 0, "C g")
-        self.fat = self._spin(0, 400, 0, "F g")
+        self.kcal = self._spin(0, 5000, 0, tr("kcal", "ккал"))
+        self.protein = self._spin(0, 500, 0, tr("P g", "Б г"))
+        self.carbs = self._spin(0, 900, 0, tr("C g", "У г"))
+        self.fat = self._spin(0, 400, 0, tr("F g", "Ж г"))
         for spin in (self.kcal, self.protein, self.carbs, self.fat):
             spin_row.addWidget(spin)
-        form.addRow("macros", self._wrap(spin_row))
+        form.addRow(tr("macros", "макро"), self._wrap(spin_row))
 
         outer.addLayout(form)
 
         button_row = QHBoxLayout()
-        self.add_button = QPushButton("✧  LOG MEAL", self)
+        self.add_button = QPushButton(tr("✧  LOG MEAL", "✧  ЗАПИСАТЬ"), self)
         kind(self.add_button, "primary")
         self.add_button.clicked.connect(self.submit)
         button_row.addStretch(1)
@@ -203,7 +211,7 @@ class MealForm(QWidget):
             return
         self.name.setProperty("invalid", "false")
         self.mealAdded.emit({
-            "name": name or "Meal",
+            "name": name or tr("Meal", "Приём пищи"),
             "time": self.time.time().toString("HH:mm"),
             "kcal": float(kcal),
             "protein": float(self.protein.value()),

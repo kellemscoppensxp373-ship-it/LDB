@@ -16,11 +16,25 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsView, QSizePolicy
 
+from ..i18n import fmt_num, is_ru, tr
 from ..storage.metrics import score_bucket
 
 WEEKDAY_LABELS = ("M", "", "W", "", "F", "", "S")
+WEEKDAY_LABELS_RU = ("Пн", "", "Ср", "", "Пт", "", "Вс")
 MONTH_NAMES = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+MONTH_NAMES_RU = ("янв", "фев", "мар", "апр", "май", "июн",
+                  "июл", "авг", "сен", "окт", "ноя", "дек")
+
+
+def weekday_labels() -> tuple[str, ...]:
+    """Weekday axis captions in the active language."""
+    return WEEKDAY_LABELS_RU if is_ru() else WEEKDAY_LABELS
+
+
+def month_names() -> tuple[str, ...]:
+    """Month axis captions in the active language."""
+    return MONTH_NAMES_RU if is_ru() else MONTH_NAMES
 
 
 class ActivityHeatmap(QGraphicsView):
@@ -143,7 +157,7 @@ class ActivityHeatmap(QGraphicsView):
             if month_key not in seen_months:
                 seen_months.add(month_key)
                 if day.day <= 7:
-                    self._month_marks.append((x, MONTH_NAMES[day.month - 1]))
+                    self._month_marks.append((x, month_names()[day.month - 1]))
 
         width = self.AXIS_LEFT + weeks * step + 8.0
         self._scene.setSceneRect(0, 0, width, height)
@@ -151,17 +165,27 @@ class ActivityHeatmap(QGraphicsView):
     @staticmethod
     def _tooltip(day: date, data: dict[str, Any]) -> str:
         score = float(data.get("score", 0.0))
-        parts = [f"{day.strftime('%a %d %b %Y')} — score {score:.0f}/100"]
+        head = (tr("%a %d %b %Y", "%d.%m.%Y")
+                if is_ru() else "%a %d %b %Y")
+        parts = [tr(f"{day.strftime('%a %d %b %Y')} — score {score:.0f}/100",
+                    f"{day.strftime(head)} — счёт {score:.0f}/100")]
         macros = data.get("macros", {})
         if macros:
-            parts.append(f"{macros.get('kcal', 0):,.0f} kcal · "
-                         f"P {macros.get('protein', 0):,.0f} g")
+            parts.append(tr(
+                f"{macros.get('kcal', 0):,.0f} kcal · "
+                f"P {macros.get('protein', 0):,.0f} g",
+                f"{fmt_num(macros.get('kcal', 0))} ккал · "
+                f"Б {fmt_num(macros.get('protein', 0))} г"))
         if data.get("sets"):
-            parts.append(f"{data['sets']} sets · {data.get('tonnage', 0):,.0f} kg")
+            parts.append(tr(
+                f"{data['sets']} sets · {data.get('tonnage', 0):,.0f} kg",
+                f"{data['sets']} сет · {fmt_num(data.get('tonnage', 0))} кг"))
         if data.get("habits_total"):
-            parts.append(f"habits {data.get('habits_done', 0)}/{data['habits_total']}")
+            parts.append(tr(
+                f"habits {data.get('habits_done', 0)}/{data['habits_total']}",
+                f"обряды {data.get('habits_done', 0)}/{data['habits_total']}"))
         if not data.get("logged"):
-            parts.append("nothing logged")
+            parts.append(tr("nothing logged", "ничего не записано"))
         return "\n".join(parts)
 
     # ---------------------------------------------------------------- paint
@@ -177,7 +201,7 @@ class ActivityHeatmap(QGraphicsView):
         painter.setPen(QPen(self._axis_color))
 
         step = self._cell + self.GAP
-        for index, label in enumerate(WEEKDAY_LABELS):
+        for index, label in enumerate(weekday_labels()):
             if label:
                 painter.drawText(
                     QRectF(0, self.AXIS_TOP + index * step - 1, self.AXIS_LEFT - 4,
@@ -205,11 +229,12 @@ class ActivityHeatmap(QGraphicsView):
         painter.setFont(font)
         painter.setPen(QPen(self._axis_color))
 
-        label = "less"
+        label = tr("less", "меньше")
+        tail = tr("more", "больше")
         metrics = painter.fontMetrics()
         text_w = metrics.horizontalAdvance(label)
         size = max(6.0, self._cell * 0.7)
-        total = text_w + 6 + 5 * (size + 2) + 6 + metrics.horizontalAdvance("more")
+        total = text_w + 6 + 5 * (size + 2) + 6 + metrics.horizontalAdvance(tail)
         x = self.viewport().width() - total - 4
         y = self.AXIS_TOP + 7 * (self._cell + self.GAP) + 6
         if x < self.AXIS_LEFT:
@@ -225,9 +250,9 @@ class ActivityHeatmap(QGraphicsView):
             painter.drawRect(QRectF(x, y, size, size))
             x += size + 2
         painter.setPen(QPen(self._axis_color))
-        painter.drawText(QRectF(x + 4, y, 40, size + 2),
+        painter.drawText(QRectF(x + 4, y, 60, size + 2),
                          Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                         "more")
+                         tail)
         painter.end()
 
     # ------------------------------------------------------------ interaction

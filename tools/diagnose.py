@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from lifeboard import __version__, paths  # noqa: E402
+from lifeboard.i18n import tr  # noqa: E402
 from lifeboard.ai.engine import env_diagnostics, list_models  # noqa: E402
 
 OK = "[ ok ]"
@@ -44,16 +45,19 @@ def check(label: str, value: object, ok: bool = True, warn: bool = False) -> Non
 def main() -> int:
     problems = 0
 
-    head("interpreter")
-    check("executable", sys.executable)
-    check("version", sys.version.split()[0],
+    head(tr("interpreter", "интерпретатор"))
+    check(tr("executable", "файл"), sys.executable)
+    check(tr("version", "версия"), sys.version.split()[0],
           ok=sys.version_info >= (3, 10), warn=sys.version_info < (3, 12))
-    check("platform", f"{platform.system()} {platform.release()} "
-                      f"({platform.machine()})")
-    check("frozen (PyInstaller)", paths.is_frozen())
+    check(tr("platform", "платформа"), f"{platform.system()} {platform.release()} "
+                                       f"({platform.machine()})")
+    check(tr("frozen (PyInstaller)", "заморожен (PyInstaller)"), paths.is_frozen())
     if sys.version_info < (3, 12):
-        print(f"       (3.12+ is the supported target; {sys.version_info.major}."
-              f"{sys.version_info.minor} works for development)")
+        print(tr(f"       (3.12+ is the supported target; {sys.version_info.major}."
+                 f"{sys.version_info.minor} works for development)",
+                 f"       (целевая версия - 3.12+; "
+                 f"{sys.version_info.major}.{sys.version_info.minor} "
+                 "подходит для разработки)"))
 
     head("Qt / PySide6")
     try:
@@ -64,13 +68,15 @@ def main() -> int:
         check("PySide6", PySide6.__version__)
         check("Qt", qVersion())
         app = QApplication.instance() or QApplication([])
-        check("QApplication", "created")
-        check("font families", ", ".join(
-            list(app.font().families())[:3]) or "(default)")
-        check("plugin path", QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath))
+        check("QApplication", tr("created", "создано"))
+        check(tr("font families", "семейства шрифтов"), ", ".join(
+            list(app.font().families())[:3]) or tr("(default)", "(по умолчанию)"))
+        check(tr("plugin path", "путь к плагинам"),
+              QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath))
         del app
     except Exception as exc:
-        check("PySide6 import", f"{type(exc).__name__}: {exc}", ok=False)
+        check(tr("PySide6 import", "импорт PySide6"),
+              f"{type(exc).__name__}: {exc}", ok=False)
         problems += 1
 
     head("llama-cpp-python")
@@ -91,36 +97,45 @@ def main() -> int:
         libs = sorted(name for name in unique
                       if not any(other != name and name.startswith(other)
                                  for other in unique))
-        check("native libraries", ", ".join(libs) if libs else "(none found)",
+        check(tr("native libraries", "нативные библиотеки"),
+              ", ".join(libs) if libs else tr("(none found)", "(не найдено)"),
               ok=True, warn=not libs)
         cuda = [name for name in libs if "cudart" in name.lower()
                 or "cublas" in name.lower()]
-        check("CUDA runtime bundled", ", ".join(cuda) if cuda else "no (CPU build)",
+        check(tr("CUDA runtime bundled", "встроен CUDA runtime"),
+              ", ".join(cuda) if cuda else tr("no (CPU build)", "нет (CPU-сборка)"),
               ok=True, warn=not cuda)
     except Exception as exc:
-        check("llama_cpp import", f"{type(exc).__name__}: {exc}", ok=False,
-              warn=True)
-        print("       the app still runs; the advisor stays in heuristic mode")
+        check(tr("llama_cpp import", "импорт llama_cpp"),
+              f"{type(exc).__name__}: {exc}", ok=False, warn=True)
+        print(tr("       the app still runs; the advisor stays in heuristic mode",
+                 "       программа работает; советник остаётся в режиме эвристики"))
 
-    head("file layout")
-    check("writable root", paths.app_root())
-    check("data file", paths.data_path(),
+    head(tr("file layout", "расположение файлов"))
+    check(tr("writable root", "корень (доступен на запись)"), paths.app_root())
+    # a missing data.json is normal on a first run: it is created on first save
+    check(tr("data file", "файл данных"),
+          f"{paths.data_path()}"
+          + ("" if paths.data_path().exists()
+             else tr("  (created on first run)", "  (создастся при первом запуске)")),
           ok=True, warn=not paths.data_path().exists())
-    check("backups", paths.backup_dir())
-    check("images", paths.image_dir())
+    check(tr("backups", "резервные копии"), paths.backup_dir())
+    check(tr("images", "рисунки"), paths.image_dir())
     check("theme.qss", paths.theme_path(), ok=paths.theme_path().is_file())
     if not paths.theme_path().is_file():
         problems += 1
 
-    head("models")
+    head(tr("models", "модели"))
     models = list_models()
-    check("models folder", paths.model_dir())
+    check(tr("models folder", "папка моделей"), paths.model_dir())
     check("LIFEBOARD_MODELS", os.environ.get("LIFEBOARD_MODELS", "(unset)"))
     if models:
         for info in models:
             check(info.family, f"{info.name}  ({paths.human_size(info.size_bytes)})")
     else:
-        check("GGUF files", "none — copy a model into the folder above",
+        check(tr("GGUF files", "файлы GGUF"),
+              tr("none — copy a model into the folder above",
+                 "нет — скопируйте модель в папку выше"),
               ok=False, warn=True)
 
     head("GPU")
@@ -132,22 +147,29 @@ def main() -> int:
             out = subprocess.run([nvidia, "--query-gpu=name,memory.total,driver_version",
                                   "--format=csv,noheader"],
                                  capture_output=True, text=True, timeout=20)
-            check("nvidia-smi", out.stdout.strip() or "(no output)")
+            check("nvidia-smi", out.stdout.strip()
+                  or tr("(no output)", "(нет вывода)"))
         except Exception as exc:
-            check("nvidia-smi", f"could not run ({exc})", ok=False, warn=True)
+            check("nvidia-smi", tr(f"could not run ({exc})",
+                                   f"не удалось запустить ({exc})"),
+                  ok=False, warn=True)
     else:
-        check("nvidia-smi", "not on PATH (CPU inference only)", ok=False, warn=True)
+        check("nvidia-smi", tr("not on PATH (CPU inference only)",
+                               "нет в PATH (только CPU)"), ok=False, warn=True)
 
-    head("engine diagnostics")
+    head(tr("engine diagnostics", "диагностика движка"))
     for key, value in env_diagnostics().items():
         check(key, value)
 
     print()
     if problems:
-        print(f"  {problems} blocking problem(s) found — see the [FAIL] lines.")
+        print(tr(f"  {problems} blocking problem(s) found — see the [FAIL] lines.",
+                 f"  найдено критических проблем: {problems} - см. строки [FAIL]."))
     else:
-        print("  no blocking problems. If the window still will not appear,")
-        print("  check crash.log next to the executable.")
+        print(tr("  no blocking problems. If the window still will not appear,",
+                 "  критических проблем нет. Если окно всё равно не появляется,"))
+        print(tr("  check crash.log next to the executable.",
+                 "  посмотрите crash.log рядом с исполняемым файлом."))
     print()
     return 1 if problems else 0
 

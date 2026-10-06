@@ -17,6 +17,9 @@ sys.path.insert(0, str(ROOT / "src"))
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("LIFEBOARD_MODELS", str(ROOT / "models"))
+# The shipped default language is Russian; the existing English assertions run
+# against the English catalogue.  A dedicated test_i18n.py flips to "ru".
+os.environ.setdefault("LIFEBOARD_LANG", "en")
 
 import pytest  # noqa: E402
 

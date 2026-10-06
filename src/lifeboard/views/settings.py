@@ -25,8 +25,10 @@ from PySide6.QtWidgets import (
 
 from .. import __app_name__, __version__, paths
 from ..ai.engine import env_diagnostics
+from ..ai.prompts import default_persona
 from ..ai.workers import AiController
 from ..storage.store import Store
+from ..i18n import tr
 from ..theme import build_palette, heat_levels
 from ..widgets.common import Banner, Card, HRule, SectionLabel, kind, role
 
@@ -84,7 +86,7 @@ class SettingsView(QWidget):
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.addWidget(SectionLabel("Rites & Configuration", "☾"))
+        root.addWidget(SectionLabel(tr("Rites & Configuration", "Обряды и настройки"), "☾"))
         root.addWidget(scroll, 1)
 
         self._build_appearance()
@@ -99,7 +101,7 @@ class SettingsView(QWidget):
 
     # -------------------------------------------------------------- sections
     def _build_appearance(self) -> None:
-        card = Card("Palette — single base hue", "✧")
+        card = Card(tr("Palette — single base hue", "Палитра — один базовый тон"), "✧")
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
@@ -113,20 +115,23 @@ class SettingsView(QWidget):
         role(self.hue_value, "accent")
         self.hue_value.setFixedWidth(48)
         self.hue_slider_row.addWidget(self.hue_value)
-        form.addRow("hue", self._wrap(self.hue_slider_row))
+        form.addRow(tr("hue", "тон"), self._wrap(self.hue_slider_row))
 
         self.swatch = HueSwatch(self)
-        form.addRow("palette", self.swatch)
+        form.addRow(tr("palette", "палитра"), self.swatch)
 
-        self.monday_check = QCheckBox("weeks start on Monday (heatmap columns)", self)
+        self.monday_check = QCheckBox(
+            tr("weeks start on Monday (heatmap columns)",
+               "недели начинаются в понедельник (колонки тепловой карты)"), self)
         self.monday_check.toggled.connect(self._save_settings)
-        form.addRow("calendar", self.monday_check)
+        form.addRow(tr("calendar", "календарь"), self.monday_check)
 
         card.content.addLayout(form)
         preset_row = QHBoxLayout()
         preset_row.setSpacing(6)
-        for label, value in (("violet", 265), ("blood", 350), ("absinthe", 95),
-                             ("cyanide", 190), ("ember", 25), ("bone", 45)):
+        for label, value in ((tr("violet", "фиолет"), 265), (tr("blood", "кровь"), 350),
+                             (tr("absinthe", "абсент"), 95), (tr("cyanide", "цианид"), 190),
+                             (tr("ember", "угли"), 25), (tr("bone", "кость"), 45)):
             button = QPushButton(f"{label} {value}°", self)
             kind(button, "ghost")
             button.clicked.connect(lambda checked=False, v=value: self.hue.setValue(v))
@@ -136,33 +141,35 @@ class SettingsView(QWidget):
         self.body.addWidget(card)
 
     def _build_goals(self) -> None:
-        card = Card("Targets", "❖")
+        card = Card(tr("Targets", "Цели"), "❖")
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self.kcal = self._spin(0, 20000, " kcal")
-        self.protein = self._spin(0, 1000, " g")
-        self.carbs = self._spin(0, 2000, " g")
-        self.fat = self._spin(0, 1000, " g")
+        self.kcal = self._spin(0, 20000, tr(" kcal", " ккал"))
+        self.protein = self._spin(0, 1000, tr(" g", " г"))
+        self.carbs = self._spin(0, 2000, tr(" g", " г"))
+        self.fat = self._spin(0, 1000, tr(" g", " г"))
         self.tonnage = QDoubleSpinBox(self)
         self.tonnage.setRange(0, 100000)
         self.tonnage.setDecimals(0)
-        self.tonnage.setSuffix(" kg")
-        self.habits_goal = self._spin(0, 50, " rites")
+        self.tonnage.setSuffix(tr(" kg", " кг"))
+        self.habits_goal = self._spin(0, 50, tr(" rites", " обрядов"))
 
-        for label, widget in (("calories", self.kcal), ("protein", self.protein),
-                              ("carbs", self.carbs), ("fat", self.fat),
-                              ("session tonnage", self.tonnage),
-                              ("habits per day", self.habits_goal)):
+        for label, widget in ((tr("calories", "калории"), self.kcal),
+                              (tr("protein", "белок"), self.protein),
+                              (tr("carbs", "углеводы"), self.carbs),
+                              (tr("fat", "жиры"), self.fat),
+                              (tr("session tonnage", "тоннаж тренировки"), self.tonnage),
+                              (tr("habits per day", "обрядов в день"), self.habits_goal)):
             widget.valueChanged.connect(self._save_settings)
             form.addRow(label, widget)
 
         self.profile = QTextEdit(self)
         self.profile.setFixedHeight(34)
         self.profile.textChanged.connect(self._save_settings)
-        form.addRow("profile name", self.profile)
+        form.addRow(tr("profile name", "имя профиля"), self.profile)
 
-        apply_button = QPushButton("✧  APPLY TARGETS", self)
+        apply_button = QPushButton(tr("✧  APPLY TARGETS", "✧  ПРИМЕНИТЬ ЦЕЛИ"), self)
         kind(apply_button, "primary")
         apply_button.clicked.connect(self.apply_goals)
         card.content.addLayout(form)
@@ -170,7 +177,7 @@ class SettingsView(QWidget):
         self.body.addWidget(card)
 
     def _build_ai(self) -> None:
-        card = Card("Local AI Engine", "✠")
+        card = Card(tr("Local AI Engine", "Локальный ИИ-движок"), "✠")
         self.engine_banner = Banner("", "info", card)
         card.content.addWidget(self.engine_banner)
 
@@ -183,23 +190,23 @@ class SettingsView(QWidget):
         models_row.addWidget(self.model_combo, 1)
         rescan = QPushButton("⟳", self)
         kind(rescan, "icon")
-        rescan.setToolTip("Rescan the models folder")
+        rescan.setToolTip(tr("Rescan the models folder", "Пересканировать папку моделей"))
         rescan.clicked.connect(self.refresh_models)
         models_row.addWidget(rescan)
         open_dir = QPushButton("🗀", self)
         kind(open_dir, "icon")
-        open_dir.setToolTip("Open the models folder")
+        open_dir.setToolTip(tr("Open the models folder", "Открыть папку моделей"))
         open_dir.clicked.connect(self.open_models_dir)
         models_row.addWidget(open_dir)
-        form.addRow("model", self._wrap(models_row))
+        form.addRow(tr("model", "модель"), self._wrap(models_row))
 
         self.models_hint = QLabel("", self)
         role(self.models_hint, "hint")
-        form.addRow("folder", self.models_hint)
+        form.addRow(tr("folder", "папка"), self.models_hint)
 
         self.n_ctx = self._spin(256, 262144, "")
-        self.n_gpu = self._spin(-1, 999, " layers")
-        self.n_threads = self._spin(0, 512, " threads")
+        self.n_gpu = self._spin(-1, 999, tr(" layers", " слоёв"))
+        self.n_threads = self._spin(0, 512, tr(" threads", " потоков"))
         self.temperature = QDoubleSpinBox(self)
         self.temperature.setRange(0.0, 2.0)
         self.temperature.setSingleStep(0.05)
@@ -208,34 +215,40 @@ class SettingsView(QWidget):
         self.top_p.setRange(0.0, 1.0)
         self.top_p.setSingleStep(0.01)
         self.top_p.setDecimals(2)
-        self.max_tokens = self._spin(16, 16384, " tokens")
+        self.max_tokens = self._spin(16, 16384, tr(" tokens", " токенов"))
 
-        for label, widget in (("context window", self.n_ctx),
-                              ("GPU layers", self.n_gpu),
-                              ("CPU threads", self.n_threads),
-                              ("temperature", self.temperature),
+        for label, widget in ((tr("context window", "окно контекста"), self.n_ctx),
+                              (tr("GPU layers", "слои на GPU"), self.n_gpu),
+                              (tr("CPU threads", "потоки CPU"), self.n_threads),
+                              (tr("temperature", "температура"), self.temperature),
                               ("top_p", self.top_p),
-                              ("max answer", self.max_tokens)):
+                              (tr("max answer", "макс. ответ"), self.max_tokens)):
             form.addRow(label, widget)
 
-        self.auto_briefing = QCheckBox("generate the morning briefing on startup", self)
-        form.addRow("startup", self.auto_briefing)
+        self.auto_briefing = QCheckBox(
+            tr("generate the morning briefing on startup",
+               "строить утреннюю сводку при запуске"), self)
+        form.addRow(tr("startup", "запуск"), self.auto_briefing)
 
         self.persona = QTextEdit(self)
         self.persona.setFixedHeight(80)
-        form.addRow("persona", self.persona)
+        self.persona.setPlaceholderText(tr(
+            "leave empty to use the built-in advisor persona (shown here)",
+            "оставьте пустым - будет использована встроенная персона советника "
+            "(показана ниже)"))
+        form.addRow(tr("persona", "персона"), self.persona)
         card.content.addLayout(form)
 
         buttons = QHBoxLayout()
-        self.load_button = QPushButton("⚡  LOAD MODEL", self)
+        self.load_button = QPushButton(tr("⚡  LOAD MODEL", "⚡  ЗАГРУЗИТЬ МОДЕЛЬ"), self)
         kind(self.load_button, "primary")
         self.load_button.clicked.connect(self.load_model)
         buttons.addWidget(self.load_button)
-        self.unload_button = QPushButton("■  UNLOAD", self)
+        self.unload_button = QPushButton(tr("■  UNLOAD", "■  ВЫГРУЗИТЬ"), self)
         kind(self.unload_button, "danger")
         self.unload_button.clicked.connect(self.unload_model)
         buttons.addWidget(self.unload_button)
-        apply_ai = QPushButton("✧  SAVE PARAMETERS", self)
+        apply_ai = QPushButton(tr("✧  SAVE PARAMETERS", "✧  СОХРАНИТЬ ПАРАМЕТРЫ"), self)
         kind(apply_ai, "ghost")
         apply_ai.clicked.connect(self.apply_ai_settings)
         buttons.addWidget(apply_ai)
@@ -252,7 +265,7 @@ class SettingsView(QWidget):
         self.body.addWidget(card)
 
     def _build_data(self) -> None:
-        card = Card("Data Vault", "❖")
+        card = Card(tr("Data Vault", "Хранилище данных"), "❖")
         self.data_path_label = QLabel("", self)
         role(self.data_path_label, "hint")
         self.data_path_label.setWordWrap(True)
@@ -266,10 +279,18 @@ class SettingsView(QWidget):
 
         buttons = QHBoxLayout()
         for label, tip, slot, style in (
-            ("⟳  REFRESH LIST", "rescan the backups folder", self.refresh_backups, "ghost"),
-            ("✧  BACKUP NOW", "write a snapshot into backups/", self.backup_now, "primary"),
-            ("⇪  RESTORE", "restore the selected snapshot", self.restore_backup, "danger"),
-            ("⧉  EXPORT JSON", "write a copy of data.json", self.export_json, "ghost"),
+            (tr("⟳  REFRESH LIST", "⟳  ОБНОВИТЬ СПИСОК"),
+             tr("rescan the backups folder", "пересканировать папку backups/"),
+             self.refresh_backups, "ghost"),
+            (tr("✧  BACKUP NOW", "✧  СОЗДАТЬ КОПИЮ"),
+             tr("write a snapshot into backups/", "записать снимок в backups/"),
+             self.backup_now, "primary"),
+            (tr("⇪  RESTORE", "⇪  ВОССТАНОВИТЬ"),
+             tr("restore the selected snapshot", "восстановить выбранный снимок"),
+             self.restore_backup, "danger"),
+            (tr("⧉  EXPORT JSON", "⧉  ЭКСПОРТ JSON"),
+             tr("write a copy of data.json", "записать копию data.json"),
+             self.export_json, "ghost"),
         ):
             button = QPushButton(label, self)
             kind(button, style)
@@ -279,20 +300,27 @@ class SettingsView(QWidget):
         buttons.addStretch(1)
         card.content.addLayout(buttons)
 
-        self.vault_hint = QLabel(
+        self.vault_hint = QLabel(tr(
             "Every save is atomic (temp file + os.replace). The five newest "
-            "snapshots are kept; older ones are pruned automatically.", self)
+            "snapshots are kept; older ones are pruned automatically.",
+            "Каждое сохранение атомарно (временный файл + os.replace). "
+            "Хранятся пять последних снимков; более старые удаляются автоматически.",
+        ), self)
         role(self.vault_hint, "muted")
         self.vault_hint.setWordWrap(True)
         card.content.addWidget(self.vault_hint)
         self.body.addWidget(card)
 
     def _build_about(self) -> None:
-        card = Card("About", "✠")
-        about = QLabel(
+        card = Card(tr("About", "О программе"), "✠")
+        about = QLabel(tr(
             f"{__app_name__} v{__version__}\n"
             "Native PySide6 desktop app. No browser, no server, no telemetry.\n"
-            "The advisor runs entirely offline on a quantised GGUF model.", self)
+            "The advisor runs entirely offline on a quantised GGUF model.",
+            f"{__app_name__} v{__version__}\n"
+            "Нативное приложение на PySide6. Без браузера, сервера и телеметрии.\n"
+            "Советник работает полностью офлайн на квантованной модели GGUF.",
+        ), self)
         role(about, "muted")
         about.setWordWrap(True)
         card.content.addWidget(about)
@@ -341,11 +369,16 @@ class SettingsView(QWidget):
         self.max_tokens.setValue(int(ai.get("max_tokens", 512)))
         self.auto_briefing.setChecked(bool(ai.get("auto_briefing", True)))
         self.persona.setPlainText(str(ai.get("persona", "")))
+        self.persona.setToolTip(tr("Effective persona:", "Действующая персона:")
+                                + "\n" + default_persona())
 
-        self.data_path_label.setText(
+        self.data_path_label.setText(tr(
             f"data file   {self.store.path}\n"
             f"backups     {self.store.backup_dir}  (keep {self.store.backup_keep})\n"
-            f"images      {paths.image_dir()}")
+            f"images      {paths.image_dir()}",
+            f"файл данных   {self.store.path}\n"
+            f"резервные копии  {self.store.backup_dir}  (хранить {self.store.backup_keep})\n"
+            f"рисунки       {paths.image_dir()}"))
 
         self.refresh_models()
         self.refresh_backups()
@@ -357,7 +390,7 @@ class SettingsView(QWidget):
         models = engine.list_models()
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
-        self.model_combo.addItem("— no model selected —", "")
+        self.model_combo.addItem(tr("— no model selected —", "— модель не выбрана —"), "")
         for info in models:
             self.model_combo.addItem(f"[{info.family}] {info.label}", str(info.path))
         configured = engine.configured_model()
@@ -366,15 +399,18 @@ class SettingsView(QWidget):
             if index >= 0:
                 self.model_combo.setCurrentIndex(index)
         self.model_combo.blockSignals(False)
-        self.models_hint.setText(
+        self.models_hint.setText(tr(
             f"{paths.model_dir()}  ·  {len(models)} GGUF file(s) found  ·  "
-            f"override with LIFEBOARD_MODELS")
+            f"override with LIFEBOARD_MODELS",
+            f"{paths.model_dir()}  ·  найдено GGUF-файлов: {len(models)}  ·  "
+            f"переопределяется через LIFEBOARD_MODELS"))
         self._update_diagnostics()
 
     def _update_diagnostics(self) -> None:
         facts = env_diagnostics()
         self.diagnostics.setText(
-            "diagnostics:  " + "   |   ".join(f"{k}={v}" for k, v in facts.items()))
+            tr("diagnostics", "диагностика") + ":  "
+            + "   |   ".join(f"{k}={v}" for k, v in facts.items()))
 
     def refresh_backups(self) -> None:
         backups = self.store.list_backups()
@@ -384,7 +420,7 @@ class SettingsView(QWidget):
                 f"{path.name}  ·  {paths.human_size(path.stat().st_size)}",
                 str(path))
         if not backups:
-            self.backup_combo.addItem("— no snapshots yet —", "")
+            self.backup_combo.addItem(tr("— no snapshots yet —", "— снимков пока нет —"), "")
 
     # ---------------------------------------------------------------- actions
     def _on_hue(self, value: int) -> None:
@@ -403,7 +439,7 @@ class SettingsView(QWidget):
             return
         self.store.update_settings(
             week_starts_monday=self.monday_check.isChecked(),
-            profile_name=self.profile.toPlainText().strip() or "Acolyte",
+            profile_name=self.profile.toPlainText().strip() or tr("Acolyte", "Адепт"),
         )
         self.miscChanged.emit()
 
@@ -417,7 +453,7 @@ class SettingsView(QWidget):
                 "tonnage": float(self.tonnage.value()),
                 "habits": self.habits_goal.value(),
             },
-            profile_name=self.profile.toPlainText().strip() or "Acolyte",
+            profile_name=self.profile.toPlainText().strip() or tr("Acolyte", "Адепт"),
             week_starts_monday=self.monday_check.isChecked(),
         )
         self.goalsChanged.emit()
@@ -443,8 +479,10 @@ class SettingsView(QWidget):
         if not chosen:
             QMessageBox.information(
                 self, __app_name__,
-                "No model selected. Drop a .gguf file into the models folder "
-                "and press the rescan button.")
+                tr("No model selected. Drop a .gguf file into the models folder "
+                   "and press the rescan button.",
+                   "Модель не выбрана. Положите файл .gguf в папку models "
+                   "и нажмите кнопку пересканирования."))
             return
         self.load_button.setEnabled(False)
         self.modelRequested.emit(str(chosen))
@@ -457,10 +495,11 @@ class SettingsView(QWidget):
         available = bool(status.get("available"))
         level = "info" if available else "warn"
         backend = status.get("backend", "?")
-        model = status.get("model") or "none"
+        model = status.get("model") or tr("none", "нет")
         message = status.get("message", "")
-        self.engine_banner.set_message(
-            f"engine: {backend}  ·  model: {model}  ·  {message}", level)
+        self.engine_banner.set_message(tr(
+            f"engine: {backend}  ·  model: {model}  ·  {message}",
+            f"движок: {backend}  ·  модель: {model}  ·  {message}"), level)
         params = status.get("params", {})
         if params:
             self.diagnostics.setToolTip(str(params))
@@ -469,9 +508,11 @@ class SettingsView(QWidget):
         path = self.store.snapshot("manual")
         self.refresh_backups()
         if path is None:
-            QMessageBox.warning(self, __app_name__, "Nothing to back up yet.")
+            QMessageBox.warning(self, __app_name__,
+                            tr("Nothing to back up yet.", "Сохранять пока нечего."))
         else:
-            self.vault_hint.setText(f"snapshot written: {path.name}")
+            self.vault_hint.setText(tr(f"snapshot written: {path.name}",
+                               f"снимок записан: {path.name}"))
 
     def restore_backup(self) -> None:
         chosen = self.backup_combo.currentData()
@@ -479,8 +520,10 @@ class SettingsView(QWidget):
             return
         answer = QMessageBox.question(
             self, __app_name__,
-            f"Restore {chosen}?\n\nThe current data.json is snapshotted first, "
-            "so this can be undone.",
+            tr(f"Restore {chosen}?\n\nThe current data.json is snapshotted first, "
+               "so this can be undone.",
+               f"Восстановить {chosen}?\n\nТекущий data.json сначала будет "
+               "сохранён в снимок, так что действие обратимо."),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if answer != QMessageBox.StandardButton.Yes:
             return
@@ -491,7 +534,8 @@ class SettingsView(QWidget):
     def export_json(self) -> None:
         default = str(paths.app_root() / f"lifeboard-export.json")
         chosen, _ = QFileDialog.getSaveFileName(
-            self, "Export data.json", default, "JSON (*.json)")
+            self, tr("Export data.json", "Экспорт data.json"), default,
+            tr("JSON (*.json)", "JSON (*.json)"))
         if not chosen:
             return
         import json
@@ -500,14 +544,17 @@ class SettingsView(QWidget):
                 json.dump(self.store.snapshot_data(), handle, indent=2,
                           ensure_ascii=False)
         except OSError as exc:
-            QMessageBox.warning(self, __app_name__, f"Export failed:\n{exc}")
+            QMessageBox.warning(self, __app_name__,
+                                tr(f"Export failed:\n{exc}",
+                                   f"Ошибка экспорта:\n{exc}"))
             return
-        self.vault_hint.setText(f"exported to {chosen}")
+        self.vault_hint.setText(tr(f"exported to {chosen}", f"экспортировано в {chosen}"))
 
     def open_models_dir(self) -> None:
         directory = paths.model_dir()
         directory.mkdir(parents=True, exist_ok=True)
-        QFileDialog.getOpenFileName(self, "Models folder", str(directory))
+        QFileDialog.getOpenFileName(self, tr("Models folder", "Папка моделей"),
+                                    str(directory))
 
     # --------------------------------------------------------------- theming
     def set_palette(self, palette: dict[str, str]) -> None:

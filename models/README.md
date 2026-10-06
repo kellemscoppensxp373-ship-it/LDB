@@ -1,67 +1,49 @@
-# models/ — where the local brain lives
+# models/ — где живёт локальный «мозг»
 
-Drop **quantised GGUF** model files in this folder. Nothing is downloaded,
-nothing is uploaded: the advisor runs entirely on your machine.
+Положите в эту папку **квантованные GGUF**-файлы моделей. Ничего не скачивается
+и не отправляется: советник работает целиком на вашей машине.
 
-## Recommended models
+## Рекомендуемые модели
 
-| Model | Quant | Size | Notes |
+| Модель | Квант | Размер | Примечание |
 |---|---|---|---|
-| Llama-3-8B-Instruct | Q4_K_M | ~4.9 GB | best advice quality, needs ~8 GB RAM free |
-| Llama-3-8B-Instruct | Q3_K_M | ~3.7 GB | good compromise |
-| Phi-3-mini-4k-instruct | Q4_K_M | ~2.2 GB | fast, excellent on CPU-only machines |
-| Qwen2.5-7B-Instruct | Q4_K_M | ~4.7 GB | strong at terse structured answers |
+| Llama-3-8B-Instruct | Q4_K_M | ~4.9 ГБ | лучшее качество советов, нужно ~8 ГБ свободной RAM |
+| Llama-3-8B-Instruct | Q3_K_M | ~3.7 ГБ | хороший компромисс |
+| Phi-3-mini-4k-instruct | Q4_K_M | ~2.2 ГБ | быстрая, отлично подходит для машин без GPU |
+| Qwen2.5-7B-Instruct | Q4_K_M | ~4.7 ГБ | сильна в кратких структурированных ответах |
 
-Get them from Hugging Face (search `<model name> GGUF`), e.g. the
-`bartowski`, `TheBloke` or `lmstudio-community` repositories.
+Берите их с Hugging Face (поиск `<имя модели> GGUF`), например из репозиториев
+`bartowski`, `TheBloke` или `lmstudio-community`.
 
-## After copying a file
+## После копирования файла
 
-1. Start LifeBoard AI.
-2. Open **☾ Rites & Config → Local AI Engine**.
-3. Press **⟳** to rescan, pick the model, then **⚡ LOAD MODEL**.
-4. The status strip should read `engine: llama.cpp · model: <file>.gguf`.
+1. Запустите LifeBoard AI.
+2. Откройте **☾ Обряды и настройки → Локальный ИИ-движок**.
+3. Нажмите **⟳** для пересканирования, выберите модель и нажмите **⚡ ЗАГРУЗИТЬ МОДЕЛЬ**.
+4. В строке состояния должно появиться `движок: llama.cpp · модель: <file>.gguf`.
 
-Until a model is loaded the advisor runs in **heuristic mode**: it still
-analyses your log and produces the morning briefing, but the text is computed
-from rules rather than generated.
+Пока модель не загружена, советник работает в **режиме эвристики**: он по-прежнему
+анализирует ваш журнал и пишет утреннюю сводку, но текст вычисляется по правилам,
+а не генерируется.
 
-## Models on another drive
+## Модели на другом диске
 
-Models are large. Instead of duplicating them next to the exe, point the app at
-an existing folder:
+Модели весят много. Чтобы не дублировать их рядом с .exe, укажите приложению
+уже существующую папку:
 
 ```bat
 setx LIFEBOARD_MODELS "D:\AI\models"
 ```
 
-(Restart the app afterwards.)
+(После этого перезапустите программу.)
 
-## GPU acceleration
+## Ускорение на GPU
 
-The default `llama-cpp-python` install is CPU-only. For CUDA:
+По умолчанию `n_gpu_layers=0` (только CPU). Если у вас есть NVIDIA GPU и сборка
+с CUDA (`build_windows.bat --cuda`), откройте **Обряды и настройки** и увеличьте
+«слои на GPU» (например, `-1` — выгрузить всё на GPU), затем перезагрузите модель.
 
-```bat
-build_windows.bat --cuda
-```
+## Приватность
 
-or by hand:
-
-```bat
-pip install llama-cpp-python --force-reinstall --no-cache-dir ^
-  --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121
-```
-
-Then set **GPU layers** to `-1` (offload everything) in the settings page.
-You also need the matching CUDA runtime (`cudart64_*.dll`, `cublas64_*.dll`) on
-the machine — the CUDA wheels ship them and `LifeBoard.spec` copies them into
-the build.
-
-## Sizing the context window
-
-`context window` (n_ctx) is how much text the model can see at once. LifeBoard
-injects roughly 2–3 KB of your own log per request, so:
-
-* **2048** — fine for quick questions on a small model
-* **4096** — the default, comfortable
-* **8192+** — only if you ask long questions; it costs RAM
+Файлы из этой папки читает только ваша копия программы. Никакого сетевого
+доступа нет и не будет.

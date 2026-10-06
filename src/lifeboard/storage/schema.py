@@ -14,6 +14,8 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
+from ..i18n import tr
+
 #: Bump when the on-disk shape changes in a way old readers cannot handle.
 SCHEMA_VERSION = 3
 
@@ -39,7 +41,8 @@ def now_iso() -> str:
 
 
 DEFAULT_SETTINGS: dict[str, Any] = {
-    "profile_name": "Acolyte",
+    # empty = fall back to :func:`default_profile_name` (language aware)
+    "profile_name": "",
     "hue": 265,                     # single base HSL hue for the whole palette
     "goals": {
         "kcal": 2600,
@@ -62,22 +65,51 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "max_tokens": 512,
         "stream": True,
         "auto_briefing": True,
-        "persona": (
-            "You are the LifeBoard Advisor: a terse, direct, slightly gothic "
-            "coaching intelligence embedded in a local desktop app. You speak "
-            "in short imperative sentences, you never apologise, you never "
-            "mention that you are a language model, and you always ground your "
-            "advice in the numbers from the user's own logs."
-        ),
+        # empty = use the built-in persona for the active language
+        # (``lifeboard.ai.prompts.default_persona``).  A non-empty value here is
+        # an explicit user override and is passed to the model verbatim.
+        "persona": "",
     },
 }
 
-STARTER_HABITS: list[dict[str, Any]] = [
-    {"name": "Read 20 pages", "glyph": "✧"},
-    {"name": "Move / walk 8k steps", "glyph": "⚔"},
-    {"name": "No sugar after 20:00", "glyph": "☾"},
-    {"name": "Deep work block (90 min)", "glyph": "❖"},
+STARTER_HABITS: list[dict[str, str]] = [
+    {"name": "Read 20 pages", "ru": "Прочитать 20 страниц", "glyph": "✧"},
+    {"name": "Move / walk 8k steps", "ru": "Движение / 8 тыс. шагов", "glyph": "⚔"},
+    {"name": "No sugar after 20:00", "ru": "Без сахара после 20:00", "glyph": "☾"},
+    {"name": "Deep work block (90 min)", "ru": "Блок глубокой работы (90 мин)",
+     "glyph": "❖"},
 ]
+
+#: ``(english, russian, muscle, equipment)`` — muscle/equipment stay canonical.
+STARTER_EXERCISES: tuple[tuple[str, str, str, str], ...] = (
+    ("Bench Press", "Жим лёжа", "Chest", "Barbell"),
+    ("Incline Dumbbell Press", "Жим гантелей на наклонной", "Chest", "Dumbbell"),
+    ("Back Squat", "Приседания со штангой", "Legs", "Barbell"),
+    ("Romanian Deadlift", "Румынская тяга", "Legs", "Barbell"),
+    ("Deadlift", "Становая тяга", "Back", "Barbell"),
+    ("Pull-Up", "Подтягивания", "Back", "Bodyweight"),
+    ("Barbell Row", "Тяга штанги в наклоне", "Back", "Barbell"),
+    ("Overhead Press", "Жим стоя", "Shoulders", "Barbell"),
+    ("Lateral Raise", "Махи гантелями в стороны", "Shoulders", "Dumbbell"),
+    ("Barbell Curl", "Подъём штанги на бицепс", "Arms", "Barbell"),
+)
+
+
+def default_profile_name() -> str:
+    """Fallback profile name in the active language."""
+    return tr("Acolyte", "Адепт")
+
+
+def starter_habits() -> list[dict[str, str]]:
+    """The four seeded habits, named in the active language."""
+    return [{"name": tr(h["name"], h["ru"]), "glyph": h["glyph"]}
+            for h in STARTER_HABITS]
+
+
+def starter_exercises() -> tuple[tuple[str, str, str], ...]:
+    """``(name, muscle, equipment)`` for the seeded exercises, localised."""
+    return tuple((tr(en, ru), muscle, equipment)
+                 for en, ru, muscle, equipment in STARTER_EXERCISES)
 
 
 def default_state() -> dict[str, Any]:
@@ -90,7 +122,7 @@ def default_state() -> dict[str, Any]:
         "habits": [
             {"id": new_id("h"), "name": h["name"], "glyph": h["glyph"],
              "active": True, "created": now_iso()}
-            for h in STARTER_HABITS
+            for h in starter_habits()
         ],
         # day -> {habit_id: 0|1}
         "habit_log": {},
@@ -98,18 +130,7 @@ def default_state() -> dict[str, Any]:
         "diet_log": {},
         "exercises": [
             {"id": new_id("x"), "name": n, "muscle": m, "equipment": e, "kind": "strength"}
-            for n, m, e in (
-                ("Bench Press", "Chest", "Barbell"),
-                ("Incline Dumbbell Press", "Chest", "Dumbbell"),
-                ("Back Squat", "Legs", "Barbell"),
-                ("Romanian Deadlift", "Legs", "Barbell"),
-                ("Deadlift", "Back", "Barbell"),
-                ("Pull-Up", "Back", "Bodyweight"),
-                ("Barbell Row", "Back", "Barbell"),
-                ("Overhead Press", "Shoulders", "Barbell"),
-                ("Lateral Raise", "Shoulders", "Dumbbell"),
-                ("Barbell Curl", "Arms", "Barbell"),
-            )
+            for n, m, e in starter_exercises()
         ],
         # day -> {"name": str, "notes": str, "entries": [...]}
         "workout_log": {},
@@ -170,6 +191,7 @@ def _merge_settings(raw: Any) -> dict[str, Any]:
         elif key in out:
             out[key] = value
     out["hue"] = _as_int(out["hue"], DEFAULT_SETTINGS["hue"], 0, 359)
+    out["profile_name"] = _as_str(out["profile_name"]) or default_profile_name()
     goals = out["goals"]
     goals["kcal"] = _as_int(goals["kcal"], 2600, 0, 20000)
     goals["protein"] = _as_int(goals["protein"], 180, 0, 1000)
@@ -188,7 +210,7 @@ def _merge_settings(raw: Any) -> dict[str, Any]:
     ai["stream"] = _as_bool(ai["stream"], True)
     ai["auto_briefing"] = _as_bool(ai["auto_briefing"], True)
     ai["model_file"] = _as_str(ai["model_file"])
-    ai["persona"] = _as_str(ai["persona"], DEFAULT_SETTINGS["ai"]["persona"])
+    ai["persona"] = _as_str(ai["persona"])      # "" = built-in, language aware
     return out
 
 

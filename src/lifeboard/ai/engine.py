@@ -25,7 +25,8 @@ from typing import Any, Callable, Iterator
 from .. import paths
 from .briefing import briefing_text, build_briefing
 from .context import build_context
-from .prompts import DEFAULT_PERSONA, system_prompt, trim_history
+from ..i18n import fmt_num, is_ru, tr
+from .prompts import default_persona, system_prompt, trim_history
 
 MODEL_GLOBS = ("*.gguf",)
 
@@ -152,14 +153,18 @@ class AIEngine:
         if target is None:
             available = self.list_models()
             if not available:
-                raise EngineError(
+                raise EngineError(tr(
                     f"No .gguf model found in {self._models_dir}. Drop a "
                     "quantised model (Llama-3-8B-Instruct Q4_K_M or Phi-3-mini) "
-                    "into that folder, or point LIFEBOARD_MODELS at one.")
+                    "into that folder, or point LIFEBOARD_MODELS at one.",
+                    f"В {self._models_dir} нет модели .gguf. Положите туда "
+                    "квантованную модель (Llama-3-8B-Instruct Q4_K_M или Phi-3-mini) "
+                    "или укажите папку через LIFEBOARD_MODELS."))
             target = available[0].path
         if not target.is_file():
             self._attempted = target
-            raise EngineError(f"Model file not found: {target}")
+            raise EngineError(tr(f"Model file not found: {target}",
+                                 f"Файл модели не найден: {target}"))
         self._attempted = target
 
         with self._lock:
@@ -171,14 +176,20 @@ class AIEngine:
                 try:
                     self._llama_module = importlib.import_module("llama_cpp")
                 except Exception as exc:  # ImportError, OSError (missing DLL)
-                    self._load_error = (
+                    self._load_error = tr(
                         f"llama-cpp-python is not usable here ({type(exc).__name__}: "
                         f"{exc}). Run `pip install llama-cpp-python` (add "
                         "`--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121` "
-                        "for CUDA). The advisor stays in heuristic mode meanwhile.")
+                        "for CUDA). The advisor stays in heuristic mode meanwhile.",
+                        f"llama-cpp-python здесь недоступен ({type(exc).__name__}: "
+                        f"{exc}). Выполните `pip install llama-cpp-python` (для CUDA "
+                        "добавьте `--extra-index-url "
+                        "https://abetlen.github.io/llama-cpp-python/whl/cu121`). "
+                        "Пока советник работает в режиме эвристики.")
                     raise EngineError(self._load_error) from exc
             if progress:
-                progress(f"loading {target.name} …")
+                progress(tr(f"loading {target.name} …",
+                            f"загрузка {target.name} …"))
             kwargs: dict[str, Any] = {
                 "model_path": str(target),
                 "n_ctx": int(ai.get("n_ctx", 4096)),
@@ -191,9 +202,12 @@ class AIEngine:
             try:
                 self._llm = self._llama_module.Llama(**kwargs)
             except Exception as exc:
-                self._load_error = (
+                self._load_error = tr(
                     f"Could not load {target.name}: {type(exc).__name__}: {exc}. "
-                    "Try fewer GPU layers (n_gpu_layers=0) or a smaller quant.")
+                    "Try fewer GPU layers (n_gpu_layers=0) or a smaller quant.",
+                    f"Не удалось загрузить {target.name}: {type(exc).__name__}: {exc}. "
+                    "Попробуйте меньше слоёв на GPU (n_gpu_layers=0) или более "
+                    "компактный квант.")
                 raise EngineError(self._load_error) from exc
             self._model_path = target
             self._load_error = None
@@ -220,7 +234,8 @@ class AIEngine:
         }
         if self._llm is not None and self._model_path is not None:
             return EngineStatus(True, "llama.cpp", self._model_path.name,
-                                "model resident in memory", params)
+                                tr("model resident in memory", "модель в памяти"),
+                                params)
         configured = self.configured_model() or self._attempted
         if self._load_error:
             return EngineStatus(False, "heuristic", configured.name if configured else "",
@@ -230,13 +245,18 @@ class AIEngine:
             if not models:
                 return EngineStatus(
                     False, "heuristic", "",
-                    f"No model in {self._models_dir} — advisor runs on the "
-                    "built-in rule engine.", params)
+                    tr(f"No model in {self._models_dir} — advisor runs on the "
+                       "built-in rule engine.",
+                       f"В {self._models_dir} моделей нет — советник работает на "
+                       "встроенном правиле-движке."), params)
             return EngineStatus(
                 False, "heuristic", models[0].name,
-                "Model found but not loaded yet — press Load in Settings.", params)
+                tr("Model found but not loaded yet — press Load in Settings.",
+                   "Модель найдена, но не загружена — нажмите «Загрузить» "
+                   "в настройках."), params)
         return EngineStatus(False, "heuristic", configured.name,
-                            "Model selected but not loaded.", params)
+                            tr("Model selected but not loaded.",
+                               "Модель выбрана, но не загружена."), params)
 
     # ------------------------------------------------------------ generation
     def stream(
@@ -277,7 +297,9 @@ class AIEngine:
             raise
         except Exception as exc:
             message = f"{type(exc).__name__}: {exc}"
-            self._load_error = f"Generation failed ({message}). Reverted to heuristic mode."
+            self._load_error = tr(
+                f"Generation failed ({message}). Reverted to heuristic mode.",
+                f"Генерация не удалась ({message}). Возврат к режиму эвристики.")
             self.unload()
             raise EngineError(self._load_error) from exc
 
@@ -306,15 +328,20 @@ class AIEngine:
         """Rule-based advisor used when no model is loaded."""
         state = self._state() if self._state else {}
         if not state:
-            return ("No data file is open, so there is nothing to advise on yet. "
-                    "Log a habit, a meal or a set and ask again.")
+            return tr("No data file is open, so there is nothing to advise on yet. "
+                      "Log a habit, a meal or a set and ask again.",
+                      "Файл данных не открыт, поэтому советовать пока нечего. "
+                      "Запишите обряд, приём пищи или сет и спросите снова.")
         today = date.today().isoformat()
         lines = build_briefing(state, today=date.today())
         context = build_context(state, day=today, query=question, max_chars=1400)
         body = briefing_text(lines)
-        header = ("[heuristic mode — no GGUF model loaded; this answer is "
-                  "computed from your own log, not generated]\n\n")
-        return f"{header}{body}\n\nRAW CONTEXT\n{context}"
+        header = tr("[heuristic mode — no GGUF model loaded; this answer is "
+                    "computed from your own log, not generated]\n\n",
+                    "[режим эвристики — GGUF-модель не загружена; этот ответ "
+                    "вычислен по вашему журналу, а не сгенерирован]\n\n")
+        return f"{header}{body}\n\n" + tr("RAW CONTEXT", "ИСХОДНЫЕ ДАННЫЕ") \
+            + f"\n{context}"
 
     # --------------------------------------------------------------- helpers
     def chat_messages(self, history: list[dict[str, str]], question: str, *,
@@ -325,7 +352,7 @@ class AIEngine:
         state = state if state is not None else (self._state() if self._state else {})
         context = build_context(state, day=day, query=question,
                                 max_chars=max_context_chars)
-        persona = str(self._ai().get("persona") or DEFAULT_PERSONA)
+        persona = str(self._ai().get("persona") or default_persona())
         messages: list[dict[str, str]] = [
             {"role": "system", "content": system_prompt(persona, context)}
         ]
@@ -341,7 +368,7 @@ class AIEngine:
         state = state if state is not None else (self._state() if self._state else {})
         day = day or date.today().isoformat()
         context = build_context(state, day=day, max_chars=2000)
-        persona = str(self._ai().get("persona") or DEFAULT_PERSONA)
+        persona = str(self._ai().get("persona") or default_persona())
         metrics_block = briefing_text(build_briefing(
             state, today=date.fromisoformat(day[:10])))
         messages = [

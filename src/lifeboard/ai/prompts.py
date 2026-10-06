@@ -6,12 +6,22 @@ serialised life data so the model has grounding it cannot invent.
 
 from __future__ import annotations
 
+from ..i18n import is_ru, tr
+
 DEFAULT_PERSONA = (
     "You are the LifeBoard Advisor: a terse, direct, slightly gothic coaching "
     "intelligence embedded in a local desktop app. You speak in short "
     "imperative sentences, you never apologise, you never mention that you are "
     "a language model, and you always ground your advice in the numbers from "
     "the user's own logs."
+)
+
+DEFAULT_PERSONA_RU = (
+    "Ты — Советник LifeBoard: лаконичный, прямой, слегка мрачный "
+    "тренер-интеллект, встроенный в локальное настольное приложение. Ты "
+    "говоришь короткими повелительными фразами, никогда не извиняешься, "
+    "никогда не упоминаешь, что ты языковая модель, и всегда опираешься на "
+    "числа из журналов самого пользователя. Отвечай по-русски."
 )
 
 RULES = (
@@ -25,6 +35,45 @@ RULES = (
     "- Never invent workouts, meals or habits that are not in the log.\n"
     "- You are running offline on the user's own machine; there is no network."
 )
+
+RULES_RU = (
+    "ПРАВИЛА:\n"
+    "- Отвечай не более чем 6 короткими строками, если не просят подробнее.\n"
+    "- Только обычный текст. Без markdown-заголовков, маркеров и эмодзи.\n"
+    "- Цитируй собственные числа пользователя (ккал, тоннаж, закрытые "
+    "обряды, серия).\n"
+    "- Если данные не подтверждают вывод, скажи, что журнал пуст, вместо "
+    "догадок.\n"
+    "- Никогда не придумывай тренировки, приёмы пищи или обряды, которых "
+    "нет в журнале.\n"
+    "- Ты работаешь офлайн на машине пользователя; сети нет.\n"
+    "- Отвечай на русском языке."
+)
+
+EDITOR_INSTRUCTIONS_RU = {
+    "summarize": (
+        "Сожми следующую запись дневника не более чем в 4 строки обычного "
+        "текста. Сохрани конкретику (числа, имена, решения). Не добавляй "
+        "комментариев и советов.\n\nЗАПИСЬ:\n"
+    ),
+    "improve": (
+        "Перепиши следующую запись дневника плотнее и выразительнее. "
+        "Сохрани каждый факт и первое лицо. Выведи только переписанную "
+        "запись, без предисловий.\n\nЗАПИСЬ:\n"
+    ),
+    "ideas": (
+        "На основе следующей записи дневника предложи 5 конкретных тем или "
+        "действий для автора, по одной в строке, нумерация 1-5. Каждая "
+        "должна опираться на что-то реально присутствующее в записи."
+        "\n\nЗАПИСЬ:\n"
+    ),
+    "briefing": (
+        "Напиши утреннюю сводку для пользователя по метрикам ниже. Не более "
+        "5 коротких строк: одна про тренировочную нагрузку, одна про "
+        "питание, одна про обряды, одна про самое результативное действие "
+        "на сегодня. Конкретно, с числами, без воды.\n\n"
+    ),
+}
 
 EDITOR_INSTRUCTIONS = {
     "summarize": (
@@ -51,14 +100,25 @@ EDITOR_INSTRUCTIONS = {
 }
 
 
+def default_persona() -> str:
+    """Persona in the active language."""
+    return DEFAULT_PERSONA_RU if is_ru() else DEFAULT_PERSONA
+
+
+def rules() -> str:
+    """Rule block in the active language."""
+    return RULES_RU if is_ru() else RULES
+
+
 def system_prompt(persona: str = "", context: str = "") -> str:
     """Assemble the hidden system turn: persona + rules + serialised life data."""
-    persona = (persona or DEFAULT_PERSONA).strip()
-    parts = [persona, "", RULES]
+    persona = (persona or default_persona()).strip()
+    parts = [persona, "", rules()]
     if context:
         parts += [
             "",
-            "CURRENT USER DATA (authoritative, read-only):",
+            tr("CURRENT USER DATA (authoritative, read-only):",
+               "ТЕКУЩИЕ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ (источник истины, только чтение):"),
             context.strip(),
         ]
     return "\n".join(parts)
@@ -66,12 +126,15 @@ def system_prompt(persona: str = "", context: str = "") -> str:
 
 def editor_prompt(kind: str, body: str, context: str = "") -> str:
     """User-turn prompt for the diary context-menu actions."""
-    instruction = EDITOR_INSTRUCTIONS.get(kind, EDITOR_INSTRUCTIONS["summarize"])
-    body = body.strip() or "(the entry is empty)"
+    table = EDITOR_INSTRUCTIONS_RU if is_ru() else EDITOR_INSTRUCTIONS
+    instruction = table.get(kind) or EDITOR_INSTRUCTIONS.get(kind) \
+        or table["summarize"]
+    body = body.strip() or tr("(the entry is empty)", "(запись пуста)")
     if kind == "briefing":
         return f"{instruction}{body}"
     if context:
-        return f"{instruction}{body}\n\n(RECENT CONTEXT)\n{context.strip()}"
+        return f"{instruction}{body}\n\n" + tr(
+            "(RECENT CONTEXT)", "(НЕДАВНИЙ КОНТЕКСТ)") + f"\n{context.strip()}"
     return f"{instruction}{body}"
 
 

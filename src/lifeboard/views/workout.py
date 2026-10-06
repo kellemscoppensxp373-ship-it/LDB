@@ -1,4 +1,4 @@
-"""Workout library + session logger with automatic tonnage maths."""
+"""Железный архив: библиотека упражнений + журнал сетов с подсчётом тоннажа."""
 
 from __future__ import annotations
 
@@ -23,18 +23,37 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..i18n import fmt_date, fmt_num, tr
 from ..storage.metrics import workout_totals
 from ..storage.store import Store
 from ..widgets.common import Card, HRule, InlineBar, SectionLabel, kind, role
 
+#: Canonical, language-neutral keys — these are what land in ``data.json`` and
+#: in the AI context prompt.  Only their *display* form is translated.
 MUSCLE_GROUPS = ("Chest", "Back", "Legs", "Shoulders", "Arms", "Core", "General")
 EQUIPMENT = ("Barbell", "Dumbbell", "Machine", "Cable", "Kettlebell",
              "Bodyweight", "Band", "Other")
-SET_COLUMNS = ("Exercise", "Reps", "Weight", "Volume")
+
+_MUSCLE_RU = {"Chest": "Грудь", "Back": "Спина", "Legs": "Ноги",
+              "Shoulders": "Плечи", "Arms": "Руки", "Core": "Пресс",
+              "General": "Общее"}
+_EQUIPMENT_RU = {"Barbell": "Штанга", "Dumbbell": "Гантели", "Machine": "Тренажёр",
+                 "Cable": "Блок", "Kettlebell": "Гиря", "Bodyweight": "Свой вес",
+                 "Band": "Резина", "Other": "Другое"}
+
+
+def _muscle(value: str) -> str:
+    """Display form of a muscle group in the active language."""
+    return tr(value, _MUSCLE_RU.get(value, value))
+
+
+def _gear(value: str) -> str:
+    """Display form of an equipment type in the active language."""
+    return tr(value, _EQUIPMENT_RU.get(value, value))
 
 
 class WorkoutView(QWidget):
-    """Exercise CRUD on the left, today's sets on the right."""
+    """Слева CRUD упражнений, справа — сеты за выбранный день."""
 
     dateChanged = Signal(str)
 
@@ -68,11 +87,12 @@ class WorkoutView(QWidget):
         layout = QHBoxLayout(header)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
-        layout.addWidget(SectionLabel("Iron Library", "⚔"))
+        layout.addWidget(SectionLabel(tr("Iron Library", "Железный архив"), "⚔"))
         layout.addStretch(1)
 
         self.prev_button = QPushButton("◀", self)
         kind(self.prev_button, "icon")
+        self.prev_button.setToolTip(tr("Previous day", "Предыдущий день"))
         self.prev_button.clicked.connect(lambda: self.shift_date(-1))
         layout.addWidget(self.prev_button)
         self.date_label = QLabel("", self)
@@ -82,23 +102,25 @@ class WorkoutView(QWidget):
         layout.addWidget(self.date_label)
         self.next_button = QPushButton("▶", self)
         kind(self.next_button, "icon")
+        self.next_button.setToolTip(tr("Next day", "Следующий день"))
         self.next_button.clicked.connect(lambda: self.shift_date(1))
         layout.addWidget(self.next_button)
-        self.today_button = QPushButton("☾ TODAY", self)
+        self.today_button = QPushButton(tr("☾ TODAY", "☾ СЕГОДНЯ"), self)
         kind(self.today_button, "ghost")
         self.today_button.clicked.connect(self.go_today)
         layout.addWidget(self.today_button)
         return header
 
     def _build_library(self) -> QWidget:
-        card = Card("Exercise Library", "❖")
+        card = Card(tr("Exercise Library", "Библиотека упражнений"), "❖")
         wrapper = QWidget(self)
         outer = QVBoxLayout(wrapper)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(card)
 
         self.exercise_table = QTableWidget(0, 3, card)
-        self.exercise_table.setHorizontalHeaderLabels(("Name", "Muscle", "Gear"))
+        self.exercise_table.setHorizontalHeaderLabels(
+            (tr("Name", "Название"), tr("Muscle", "Мышца"), tr("Gear", "Снаряд")))
         self.exercise_table.verticalHeader().setVisible(False)
         self.exercise_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows)
@@ -115,26 +137,26 @@ class WorkoutView(QWidget):
         form = QHBoxLayout()
         form.setSpacing(6)
         self.new_name = QLineEdit(card)
-        self.new_name.setPlaceholderText("exercise name")
+        self.new_name.setPlaceholderText(tr("exercise name", "название упражнения"))
         form.addWidget(self.new_name, 1)
         self.new_muscle = QComboBox(card)
-        self.new_muscle.addItems(MUSCLE_GROUPS)
+        self.new_muscle.addItems([_muscle(m) for m in MUSCLE_GROUPS])
         form.addWidget(self.new_muscle)
         self.new_equipment = QComboBox(card)
-        self.new_equipment.addItems(EQUIPMENT)
+        self.new_equipment.addItems([_gear(e) for e in EQUIPMENT])
         form.addWidget(self.new_equipment)
         card.content.addLayout(form)
 
         buttons = QHBoxLayout()
-        add = QPushButton("✧  ADD EXERCISE", card)
+        add = QPushButton(tr("✧  ADD EXERCISE", "✧  ДОБАВИТЬ"), card)
         kind(add, "primary")
         add.clicked.connect(self.add_exercise)
         buttons.addWidget(add)
-        self.use_button = QPushButton("⚔  ADD TO SESSION", card)
+        self.use_button = QPushButton(tr("⚔  ADD TO SESSION", "⚔  В ТРЕНИРОВКУ"), card)
         kind(self.use_button, "ghost")
         self.use_button.clicked.connect(self.add_selected_to_session)
         buttons.addWidget(self.use_button)
-        delete = QPushButton("✕  DELETE", card)
+        delete = QPushButton(tr("✕  DELETE", "✕  УДАЛИТЬ"), card)
         kind(delete, "danger")
         delete.clicked.connect(self.delete_exercise)
         buttons.addWidget(delete)
@@ -143,7 +165,7 @@ class WorkoutView(QWidget):
         return wrapper
 
     def _build_logger(self) -> QWidget:
-        card = Card("Session Log", "⚔")
+        card = Card(tr("Session Log", "Журнал тренировки"), "⚔")
         wrapper = QWidget(self)
         outer = QVBoxLayout(wrapper)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -151,17 +173,20 @@ class WorkoutView(QWidget):
 
         meta = QHBoxLayout()
         meta.setSpacing(8)
-        session_label = QLabel("session", card)
+        session_label = QLabel(tr("session", "тренировка"), card)
         role(session_label, "muted")
         meta.addWidget(session_label)
         self.session_name = QLineEdit(card)
-        self.session_name.setPlaceholderText("e.g. Push / Chest & Triceps")
+        self.session_name.setPlaceholderText(tr("e.g. Push / Chest & Triceps",
+                                                "напр. Жим / грудь и трицепс"))
         self.session_name.editingFinished.connect(self.save_meta)
         meta.addWidget(self.session_name, 1)
         card.content.addLayout(meta)
 
         self.set_table = QTableWidget(0, 4, card)
-        self.set_table.setHorizontalHeaderLabels(SET_COLUMNS)
+        self.set_table.setHorizontalHeaderLabels(
+            (tr("Exercise", "Упражнение"), tr("Reps", "Повторы"),
+             tr("Weight", "Вес"), tr("Volume", "Объём")))
         self.set_table.verticalHeader().setVisible(True)
         self.set_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows)
@@ -180,21 +205,21 @@ class WorkoutView(QWidget):
         self.set_reps = QSpinBox(card)
         self.set_reps.setRange(0, 500)
         self.set_reps.setValue(8)
-        self.set_reps.setSuffix(" reps")
+        self.set_reps.setSuffix(tr(" reps", " повт"))
         self.set_reps.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         add_row.addWidget(self.set_reps)
         self.set_weight = QDoubleSpinBox(card)
         self.set_weight.setRange(0, 2000)
         self.set_weight.setValue(60)
         self.set_weight.setDecimals(1)
-        self.set_weight.setSuffix(" kg")
+        self.set_weight.setSuffix(tr(" kg", " кг"))
         self.set_weight.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.NoButtons)
         add_row.addWidget(self.set_weight)
-        add_set = QPushButton("✧  ADD SET", card)
+        add_set = QPushButton(tr("✧  ADD SET", "✧  ДОБАВИТЬ СЕТ"), card)
         kind(add_set, "primary")
         add_set.clicked.connect(self.add_set)
         add_row.addWidget(add_set)
-        remove_set = QPushButton("✕  DROP SET", card)
+        remove_set = QPushButton(tr("✕  DROP SET", "✕  УБРАТЬ СЕТ"), card)
         kind(remove_set, "danger")
         remove_set.clicked.connect(self.remove_selected_set)
         add_row.addWidget(remove_set)
@@ -233,7 +258,6 @@ class WorkoutView(QWidget):
         state = self.store.data
         exercises = state.get("exercises", [])
 
-        # ---- library table ------------------------------------------------
         self.exercise_table.setRowCount(0)
         for exercise in exercises:
             row = self.exercise_table.rowCount()
@@ -241,23 +265,21 @@ class WorkoutView(QWidget):
             name_item = QTableWidgetItem(exercise["name"])
             name_item.setData(Qt.ItemDataRole.UserRole, exercise["id"])
             self.exercise_table.setItem(row, 0, name_item)
-            self.exercise_table.setItem(row, 1, QTableWidgetItem(exercise["muscle"]))
-            self.exercise_table.setItem(row, 2, QTableWidgetItem(exercise["equipment"]))
+            self.exercise_table.setItem(row, 1, QTableWidgetItem(_muscle(exercise["muscle"])))
+            self.exercise_table.setItem(row, 2, QTableWidgetItem(_gear(exercise["equipment"])))
 
-        # ---- exercise pickers --------------------------------------------
         current = self.set_exercise.currentData()
         self.set_exercise.blockSignals(True)
         self.set_exercise.clear()
         for exercise in exercises:
-            self.set_exercise.addItem(f"{exercise['name']}  ·  {exercise['muscle']}",
-                                      exercise["id"])
+            self.set_exercise.addItem(
+                f"{exercise['name']}  ·  {_muscle(exercise['muscle'])}", exercise["id"])
         if current is not None:
             index = self.set_exercise.findData(current)
             if index >= 0:
                 self.set_exercise.setCurrentIndex(index)
         self.set_exercise.blockSignals(False)
 
-        # ---- session ------------------------------------------------------
         session = state.get("workout_log", {}).get(self.iso_date, {})
         self.session_name.blockSignals(True)
         self.session_name.setText(session.get("name", ""))
@@ -270,7 +292,7 @@ class WorkoutView(QWidget):
             for entry in session.get("entries", [])
         ]
         self._render_sets()
-        self.date_label.setText(self._date.strftime("%a %d %b %Y"))
+        self.date_label.setText(fmt_date(self._date))
         is_today = self._date == date.today()
         self.next_button.setEnabled(not is_today)
         self.today_button.setEnabled(not is_today)
@@ -303,7 +325,7 @@ class WorkoutView(QWidget):
                 self.set_table.setItem(row_index, 2, weight_item)
 
                 volume = float(item.get("reps", 0)) * float(item.get("weight", 0))
-                volume_item = QTableWidgetItem(f"{volume:,.0f} kg")
+                volume_item = QTableWidgetItem(tr(f"{volume:,.0f} kg", f"{volume:,.0f} кг"))
                 volume_item.setFlags(volume_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 volume_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 volume_item.setData(Qt.ItemDataRole.UserRole, (entry_index, set_index))
@@ -318,15 +340,18 @@ class WorkoutView(QWidget):
         ratio = (totals["tonnage"] / goal) if goal else 0.0
         self.tonnage_bar.set_ratio(ratio, over_limit=goal > 0 and totals["tonnage"] > goal * 1.3)
         self.tonnage_bar.set_caption(
-            f"{totals['tonnage']:,.0f} / {goal:,.0f} kg")
-        self.tonnage_label.setText(
-            f"⚔  TONNAGE {totals['tonnage']:,.0f} kg  ·  {totals['sets']} sets  ·  "
-            f"{totals['reps']} reps  ·  {totals['exercises']} exercises")
+            f"{fmt_num(totals['tonnage'])} / {fmt_num(goal)} " + tr("kg", "кг"))
+        self.tonnage_label.setText(tr(
+            f"⚔  TONNAGE {fmt_num(totals['tonnage'])} kg  ·  {totals['sets']} sets  ·  "
+            f"{totals['reps']} reps  ·  {totals['exercises']} exercises",
+            f"⚔  ТОННАЖ {fmt_num(totals['tonnage'])} кг  ·  сетов: {totals['sets']}  ·  "
+            f"повторов: {totals['reps']}  ·  упражнений: {totals['exercises']}"))
         top = sorted(totals["per_exercise"].items(), key=lambda kv: -kv[1])[:5]
         self.breakdown_label.setText(
-            "top lifts: " + ", ".join(f"{name} {volume:,.0f} kg"
-                                     for name, volume in top) if top else
-            "no sets logged for this day")
+            tr("top lifts: ", "лучшие подъёмы: ") + ", ".join(
+                f"{name} {fmt_num(volume)} " + tr("kg", "кг")
+                for name, volume in top) if top else
+            tr("no sets logged for this day", "за этот день сетов нет"))
 
     # -------------------------------------------------------------- actions
     def add_exercise(self) -> None:
@@ -334,10 +359,15 @@ class WorkoutView(QWidget):
         if not name:
             self.new_name.setFocus()
             return
+        # The combo index maps back to the canonical (English) key.
+        muscle_index = self.new_muscle.currentIndex()
+        gear_index = self.new_equipment.currentIndex()
         self.store.add_exercise({
             "name": name,
-            "muscle": self.new_muscle.currentText(),
-            "equipment": self.new_equipment.currentText(),
+            "muscle": MUSCLE_GROUPS[muscle_index] if muscle_index < len(MUSCLE_GROUPS)
+                      else "General",
+            "equipment": EQUIPMENT[gear_index] if gear_index < len(EQUIPMENT)
+                         else "Other",
             "kind": "strength",
         })
         self.new_name.clear()
@@ -416,7 +446,7 @@ class WorkoutView(QWidget):
         except (IndexError, KeyError, TypeError, ValueError):
             return
         column = item.column()
-        text = item.text().replace(",", "").strip()
+        text = item.text().replace(",", "").replace(" ", "").strip()
         try:
             if column == 1:
                 target["reps"] = max(0, int(float(text or 0)))

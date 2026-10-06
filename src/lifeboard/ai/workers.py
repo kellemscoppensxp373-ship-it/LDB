@@ -18,6 +18,7 @@ from typing import Any
 
 from PySide6.QtCore import QObject, QThread, Signal
 
+from ..i18n import tr
 from .engine import AIEngine, EngineError
 
 
@@ -69,14 +70,16 @@ class GenerationWorker(QThread):
             self.failed.emit(str(exc), self._tag)
             return
         except Exception as exc:  # pragma: no cover - defensive
-            self.failed.emit(f"Unexpected error: {type(exc).__name__}: {exc}",
+            self.failed.emit(tr(f"Unexpected error: {type(exc).__name__}: {exc}",
+                                f"Непредвиденная ошибка: {type(exc).__name__}: {exc}"),
                              self._tag)
             return
         text = "".join(self._chunks).strip()
         if not text and self._fallback:
             text = self._fallback
         if self._cancel.is_set() and not text:
-            self.failed.emit("Generation cancelled.", self._tag)
+            self.failed.emit(tr("Generation cancelled.", "Генерация отменена."),
+                             self._tag)
             return
         self.succeeded.emit(text, self._tag)
 
@@ -98,7 +101,7 @@ class ModelLoadWorker(QThread):
         try:
             if self._model_path == "":
                 self._engine.unload()
-                self.progress.emit("model unloaded")
+                self.progress.emit(tr("model unloaded", "модель выгружена"))
             else:
                 self._engine.load(self._model_path,
                                   progress=lambda text: self.progress.emit(text))
@@ -147,8 +150,10 @@ class AiController(QObject):
     # ------------------------------------------------------------ lifecycle
     def _start(self, worker: GenerationWorker) -> bool:
         if self.busy:
-            self.error.emit("The advisor is still working on the previous "
-                            "request. Stop it first.", worker.tag)
+            self.error.emit(tr("The advisor is still working on the previous "
+                               "request. Stop it first.",
+                               "Советник ещё обрабатывает предыдущий запрос. "
+                               "Сначала остановите его."), worker.tag)
             return False
         self._worker = worker
         worker.token.connect(self._on_token)
@@ -207,10 +212,10 @@ class AiController(QObject):
                       day: str | None = None, tag: str = "editor") -> bool:
         """Summarize / improve / ideas for the diary editor."""
         from .context import build_context
-        from .prompts import DEFAULT_PERSONA, editor_prompt, system_prompt
+        from .prompts import default_persona, editor_prompt, system_prompt
 
         context = build_context(state, day=day, query=body[:400], max_chars=1200)
-        persona = str(self._engine._ai().get("persona") or DEFAULT_PERSONA)
+        persona = str(self._engine._ai().get("persona") or default_persona())
         messages = [
             {"role": "system", "content": system_prompt(persona, context)},
             {"role": "user", "content": editor_prompt(kind, body)},

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..i18n import tr
 from .common import kind, role
 
 USER_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -150,7 +151,7 @@ class ChatDelegate(QStyledItemDelegate):
         painter.setFont(tag_font)
         painter.setPen(QPen(accent if is_user else
                             QColor(self._palette.get("TEXT_FAINT", "#6B7280"))))
-        label = "☾ YOU" if is_user else "✠ ADVISOR"
+        label = tr("☾ YOU", "☾ ВЫ") if is_user else tr("✠ ADVISOR", "✠ СОВЕТНИК")
         painter.drawText(QRectF(bubble.left(), option.rect.top(),
                                 bubble.width(), 14),
                          Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -198,31 +199,33 @@ class AiChatPanel(QWidget):
         self.view.setMinimumHeight(190)
         layout.addWidget(self.view, 1)
 
-        self.status = QLabel("✧  the advisor is idle", self)
+        self.status = QLabel(tr("✧  the advisor is idle", "✧  советник свободен"), self)
         role(self.status, "muted")
         layout.addWidget(self.status)
 
         self.composer = QTextEdit(self)
         self.composer.setObjectName("AiComposer")
-        self.composer.setPlaceholderText(
-            "Ask about your log…  (Enter sends, Shift+Enter adds a line)")
+        self.composer.setPlaceholderText(tr(
+            "Ask about your log…  (Enter sends, Shift+Enter adds a line)",
+            "Спросите о своём журнале…  (Enter — отправить, "
+            "Shift+Enter — новая строка)"))
         self.composer.setFixedHeight(78)
         self.composer.installEventFilter(self)
         layout.addWidget(self.composer)
 
         buttons = QHBoxLayout()
         buttons.setSpacing(8)
-        self.clear_button = QPushButton("⌫  CLEAR", self)
+        self.clear_button = QPushButton(tr("⌫  CLEAR", "⌫  ОЧИСТИТЬ"), self)
         kind(self.clear_button, "ghost")
         self.clear_button.clicked.connect(self.clearRequested)
         buttons.addWidget(self.clear_button)
         buttons.addStretch(1)
-        self.stop_button = QPushButton("■  STOP", self)
+        self.stop_button = QPushButton(tr("■  STOP", "■  СТОП"), self)
         kind(self.stop_button, "danger")
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.stopRequested)
         buttons.addWidget(self.stop_button)
-        self.send_button = QPushButton("✠  CONSULT", self)
+        self.send_button = QPushButton(tr("✠  CONSULT", "✠  СПРОСИТЬ"), self)
         kind(self.send_button, "primary")
         self.send_button.clicked.connect(self.submit)
         buttons.addWidget(self.send_button)

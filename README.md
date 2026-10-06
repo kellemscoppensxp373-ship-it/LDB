@@ -19,6 +19,21 @@ The UI is 100 % PySide6 (Qt for Python); the advisor is
 
 ---
 
+## Язык интерфейса / Interface language
+
+Программа по умолчанию **полностью на русском**: меню, вкладки, подписи,
+тепловая карта, сводка, эвристические ответы советника и даже демонстрационные
+данные. Английская версия сохранена для тестов и задаётся переменной окружения:
+
+```bat
+set LIFEBOARD_LANG=en        :: English strings (the test-suite default)
+set LIFEBOARD_LANG=ru        :: Русский (включено по умолчанию)
+```
+
+См. `src/lifeboard/i18n.py` и `tests/test_i18n.py`.
+
+---
+
 ## Why this exists
 
 Most "AI life trackers" are web apps that send your private journal to someone
@@ -76,6 +91,7 @@ ldb/
 │   ├── paths.py            # frozen-aware data/models/theme resolution
 │   ├── theme.py            # single-hue palette + QSS renderer (Qt-free)
 │   ├── text.py             # markdown <-> rich-text bridge for the AI editor
+│   ├── i18n.py             # two-language UI (ru default, en via LIFEBOARD_LANG)
 │   ├── storage/
 │   │   ├── schema.py       # data.json shape, defaults, defensive sanitisation
 │   │   ├── store.py        # atomic writes, 5-slot backup vault, recovery
@@ -106,7 +122,7 @@ ldb/
 ├── tools/
 │   ├── diagnose.py         # environment report used by run_dev.bat
 │   └── seed_demo.py        # ~60 days of reproducible demo data
-└── tests/                  # 165 tests: storage, metrics, briefing, RAG,
+└── tests/                  # 182 tests: storage, metrics, briefing, RAG,
                             # theme, llama integration, GUI (offscreen)
 ```
 
@@ -159,6 +175,19 @@ python -m venv .venv && .venv/bin/python -m pip install -r requirements-dev.txt
 On a headless box the GUI tests use Qt's `offscreen` platform automatically
 (`tests/conftest.py` sets `QT_QPA_PLATFORM=offscreen`).
 
+### Windows build: `check_hostname requires server_hostname`
+If your machine is behind an `https://` proxy and ships an old pip (<22), every
+`pip` call dies with `ValueError: check_hostname requires server_hostname`.
+`build_windows.bat` already works around it: it rewrites the proxy scheme to
+`http://` (the CONNECT tunnel is unchanged, TLS still end-to-end) and upgrades
+pip via `python -m pip` (module form, since `pip.exe` cannot replace itself on
+Windows). If you run pip by hand instead, do the same:
+
+```bat
+set HTTPS_PROXY=!HTTPS_PROXY:https://=http://!
+python -m pip install --upgrade pip
+```
+
 ### Theming
 One number drives the whole look: `settings.hue`. `theme.build_palette()` derives
 every background, border, text ramp, accent, semantic colour and the five heatmap
@@ -173,7 +202,7 @@ placeholders. `tests/test_theme.py` fails if a token is ever left unresolved.
 and briefing maths, the RAG serialiser, theme rendering, llama-cpp-python integration
 (against the real library when installed), and a full GUI pass on the offscreen
 platform (habits, meals, set logging with tonnage, diary + AI context menu, heatmap
-interaction, settings, restore). Run them with `pytest -q`.
+interaction, settings, restore) plus `tests/test_i18n.py` which flips the UI to Russian and asserts the Russian catalogue end to end. Run them with `pytest -q`.
 
 ## License
 

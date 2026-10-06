@@ -23,36 +23,51 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from lifeboard.i18n import tr  # noqa: E402
 from lifeboard.storage.store import Store  # noqa: E402
 
+#: ``(english, russian)`` pairs — the active language is picked by ``tr``.
 SESSIONS = (
-    ("Push", [("Bench Press", 5, 5), ("Incline Dumbbell Press", 4, 10),
-              ("Overhead Press", 3, 8), ("Lateral Raise", 3, 15)]),
-    ("Pull", [("Deadlift", 4, 4), ("Pull-Up", 4, 8), ("Barbell Row", 4, 10),
-              ("Barbell Curl", 3, 12)]),
-    ("Legs", [("Back Squat", 5, 5), ("Romanian Deadlift", 4, 8),
-              ("Back Squat", 2, 12)]),
+    (("Push", "Жим"), [("Bench Press", "Жим лёжа", 5, 5),
+                      ("Incline Dumbbell Press", "Жим гантелей на наклонной", 4, 10),
+                      ("Overhead Press", "Жим стоя", 3, 8),
+                      ("Lateral Raise", "Махи гантелями в стороны", 3, 15)]),
+    (("Pull", "Тяга"), [("Deadlift", "Становая тяга", 4, 4),
+                        ("Pull-Up", "Подтягивания", 4, 8),
+                        ("Barbell Row", "Тяга штанги в наклоне", 4, 10),
+                        ("Barbell Curl", "Подъём штанги на бицепс", 3, 12)]),
+    (("Legs", "Ноги"), [("Back Squat", "Приседания со штангой", 5, 5),
+                        ("Romanian Deadlift", "Румынская тяга", 4, 8),
+                        ("Back Squat", "Приседания со штангой", 2, 12)]),
 )
 
 MEALS = (
-    ("Oats and whey", "07:30", 620, 45, 78, 14),
-    ("Chicken and rice", "13:00", 780, 55, 92, 18),
-    ("Whey shake", "16:30", 240, 30, 6, 3),
-    ("Salmon and potatoes", "20:00", 880, 58, 84, 32),
+    (("Oats and whey", "Овсянка с протеином"), "07:30", 620, 45, 78, 14),
+    (("Chicken and rice", "Курица с рисом"), "13:00", 780, 55, 92, 18),
+    (("Whey shake", "Протеиновый коктейль"), "16:30", 240, 30, 6, 3),
+    (("Salmon and potatoes", "Лосось с картофелем"), "20:00", 880, 58, 84, 32),
 )
 
 DIARY_NOTES = (
-    "Slept badly, bench felt heavy. Shoulders nagged all evening.",
-    "Good session. Added 2.5 kg to the squat and it moved fine.",
-    "Long walk, no training. Read forty pages, which is more than usual.",
-    "Skipped sugar entirely today. Energy was flat until lunch, then fine.",
-    "Deep work block went long — two hours, no phone. Do that again.",
+    ("Slept badly, bench felt heavy. Shoulders nagged all evening.",
+     "Спал плохо, жим шёл тяжело. Плечи ныли весь вечер."),
+    ("Good session. Added 2.5 kg to the squat and it moved fine.",
+     "Хорошая тренировка. Добавил 2.5 кг к приседу, пошло легко."),
+    ("Long walk, no training. Read forty pages, which is more than usual.",
+     "Долгая прогулка, без тренировки. Прочитал сорок страниц - больше обычного."),
+    ("Skipped sugar entirely today. Energy was flat until lunch, then fine.",
+     "Сегодня совсем без сахара. До обеда энергии не было, потом нормально."),
+    ("Deep work block went long — two hours, no phone. Do that again.",
+     "Блок глубокой работы затянулся - два часа без телефона. Повторить."),
 )
 
 BOOKS = (
-    ("Meditations", "Marcus Aurelius", "reading", 254, 118, 0),
-    ("The Black Iron", "Unknown", "finished", 412, 412, 4),
-    ("Thinking in Systems", "Donella Meadows", "queued", 240, 0, 0),
+    (("Meditations", "Размышления"), ("Marcus Aurelius", "Марк Аврелий"),
+     "reading", 254, 118, 0),
+    (("The Black Iron", "Чёрное железо"), ("Unknown", "Неизвестен"),
+     "finished", 412, 412, 4),
+    (("Thinking in Systems", "Азбука системного мышления"),
+     ("Donella Meadows", "Донелла Медоуз"), "queued", 240, 0, 0),
 )
 
 
@@ -72,8 +87,9 @@ def seed(path: Path, days: int = 60, hue: int = 265) -> Path:
                 1 if rng.random() > 0.28 else 0)
 
         # diet: 2-4 meals with some scatter around the goal
-        for name, when, kcal, protein, carbs, fat in MEALS:
+        for (name_en, name_ru), when, kcal, protein, carbs, fat in MEALS:
             if rng.random() > 0.18:
+                name = tr(name_en, name_ru)
                 store.data["diet_log"].setdefault(day, {"meals": []})["meals"].append({
                     "id": f"m-{day}-{name[:3].lower()}",
                     "name": name, "time": when,
@@ -86,9 +102,11 @@ def seed(path: Path, days: int = 60, hue: int = 265) -> Path:
 
         # training: 4 days in 7
         if offset % 7 not in (3, 6, 9 % 7):
-            session_name, exercises = SESSIONS[offset % len(SESSIONS)]
+            (session_en, session_ru), exercises = SESSIONS[offset % len(SESSIONS)]
+            session_name = tr(session_en, session_ru)
             entries = []
-            for exercise, sets, reps in exercises:
+            for exercise_en, exercise_ru, sets, reps in exercises:
+                exercise = tr(exercise_en, exercise_ru)
                 base = 60.0 + (offset % 9) * 1.25
                 entries.append({
                     "exercise_id": by_name.get(exercise, ""),
@@ -102,7 +120,8 @@ def seed(path: Path, days: int = 60, hue: int = 265) -> Path:
                 "name": session_name, "notes": "", "entries": entries}
 
         if rng.random() > 0.6:
-            note = rng.choice(DIARY_NOTES)
+            note_en, note_ru = rng.choice(DIARY_NOTES)
+            note = tr(note_en, note_ru)
             store.data["diary"][day] = {
                 "html": f"<p>{note}</p>",
                 "text": note,
@@ -110,12 +129,15 @@ def seed(path: Path, days: int = 60, hue: int = 265) -> Path:
                 "updated": f"{day} 21:40:00",
             }
 
-    for title, author, status, total, read, rating in BOOKS:
-        store.add_book({"title": title, "author": author, "status": status,
+    for (title_en, title_ru), (author_en, author_ru), status, total, read, rating \
+            in BOOKS:
+        store.add_book({"title": tr(title_en, title_ru),
+                        "author": tr(author_en, author_ru), "status": status,
                         "pages_total": total, "pages_read": read,
                         "rating": rating, "started": "", "finished": "",
-                        "notes": "" if status == "queued" else
-                        "Apply the discipline chapters to the training block."})
+                        "notes": "" if status == "queued" else tr(
+                            "Apply the discipline chapters to the training block.",
+                            "Применить главы о дисциплине к тренировочному блоку.")})
 
     store.save()
     return store.path
@@ -128,7 +150,8 @@ def main() -> int:
     parser.add_argument("--hue", type=int, default=265)
     args = parser.parse_args()
     written = seed(Path(args.path), days=args.days, hue=args.hue)
-    print(f"demo data written to {written} ({args.days} days)")
+    print(tr(f"demo data written to {written} ({args.days} days)",
+             f"демонстрационные данные записаны в {written} ({args.days} дней)"))
     return 0
 
 
