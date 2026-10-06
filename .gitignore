@@ -1,0 +1,36 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- Build artefacts (PyInstaller) ----
+build/
+dist/
+*.manifest
+
+# ---- Runtime data (created next to the .exe / repo root) ----
+data.json
+data.json.tmp
+backups/
+assets/images/*.png
+assets/images/*.jpg
+assets/images/*.jpeg
+!assets/images/.gitkeep
+
+# ---- Local LLM weights: large binaries, never committed ----
+models/*.gguf
+models/*.bin
+!models/README.md
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---- Test / coverage ----
+.pytest_cache/
+.coverage
+htmlcov/

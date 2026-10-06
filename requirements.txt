@@ -1,0 +1,17 @@
+# ---------------------------------------------------------------------------
+# LifeBoard AI — runtime + build requirements
+# Python 3.12+ (3.10+ works, but the packaged build targets 3.12)
+# ---------------------------------------------------------------------------
+
+# GUI: native Qt widgets only.  No web engine, no browser runtime.
+PySide6>=6.7.0,<7.0
+
+# Offline LLM runtime.  On Windows a prebuilt wheel is normally available:
+#   pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121
+# If the build falls back to compiling from source it needs Visual Studio
+# Build Tools (C++) and CMake.  The app still runs without it — the advisor
+# simply stays in deterministic "heuristic" mode.
+llama-cpp-python>=0.3.0
+
+# Packaging.
+pyinstaller>=6.6
